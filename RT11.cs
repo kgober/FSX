@@ -60,10 +60,14 @@
 // This mode switch between the sector header and sector data is atypical and
 // makes RX02 diskettes hard to access on other systems.
 
-// DEC RK03 Cartridge - 4800 blocks
+// DEC RK05 DECpack
 //
-// DEC operating systems typically reserve the last 3 tracks for bad block
-// handling, leaving an effective capacity of 200 tracks, e
+// DEC operating systems typically reserve the last 3 cylinders for bad block
+// handling, leaving an effective capacity of 200 cylinders, each containing
+// 2 tracks of 12 512-byte sectors, or a total of 4800 blocks.
+//
+// Some operating systems (notably Unix) use all 203 cylinders (4872 blocks)
+// and therefore require special error-free disk cartridges.
 
 
 using System;

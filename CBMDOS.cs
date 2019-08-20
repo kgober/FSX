@@ -51,8 +51,96 @@ namespace FSX
     {
         public static FileSystem Try(CHSDisk disk)
         {
-            // TODO: check disk image before blindly doing this
-            return new CBMDOS(disk);
+            if (Program.Verbose > 1) Console.Error.WriteLine("CBMDOS.Try: {0}", disk.Source);
+
+            if (CheckVTOC(disk, 1) < 1) return null;
+            else return new CBMDOS(disk);
+        }
+
+        // level 0 - check basic disk parameters
+        // level 1 - check directory length
+        public static Int32 CheckVTOC(CHSDisk disk, Int32 level)
+        {
+            if (disk == null) throw new ArgumentNullException("disk");
+            if ((level < 0) || (level > 1)) throw new ArgumentOutOfRangeException("level");
+
+            // level 0 - check basic disk parameters
+            if (disk.BlockSize != 256)
+            {
+                if (Program.Verbose > 1) Console.Error.WriteLine("Disk block size = {0:D0} (must be 256)", disk.BlockSize);
+                return -1;
+            }
+            if (disk.MinHead != disk.MaxHead)
+            {
+                if (Program.Verbose > 1) Console.Error.WriteLine("Disk must be logically single-sided");
+                return -1;
+            }
+            if (disk.MinCylinder < 1)
+            {
+                if (Program.Verbose > 1) Console.Error.WriteLine("Disk track numbering must start at 1 (is {0:D0})", disk.MinCylinder);
+                return -1;
+            }
+            if (disk.MinSector() != 0)
+            {
+                if (Program.Verbose > 1) Console.Error.WriteLine("Disk sector numbering must start at 0 (is {0:D0})", disk.MinSector());
+                return -1;
+            }
+            if (disk.MaxCylinder < 18)
+            {
+                if (Program.Verbose > 1) Console.Error.WriteLine("Disk too small to contain directory track");
+                return -1;
+            }
+            if ((disk.MaxCylinder <= 42) && (disk.MinCylinder > 18))
+            {
+                if (Program.Verbose > 1) Console.Error.WriteLine("Disk too small to contain directory track 18");
+                return -1;
+            }
+            if ((disk.MaxCylinder > 42) && (disk.MinCylinder > 39))
+            {
+                if (Program.Verbose > 1) Console.Error.WriteLine("Disk too small to contain directory track 39");
+                return -1;
+            }
+            Int32 ms = -1;
+            for (Int32 i = disk.MinCylinder; i <= disk.MaxCylinder; i++) if (disk[i, 0].Length > ms) ms = disk[i, 0].Length;
+            if (level == 0) return 0;
+
+            // level 1 - check directory length
+            Int32[,] SS = new Int32[disk.MaxCylinder + 1, ms + 1];
+            Int32 sc = 0; // segment count
+            Int32 t = (disk.MaxCylinder <= 42) ? 18 : 39;
+            Int32 s = 0;
+            while (t != 0)
+            {
+                if ((t < disk.MinCylinder) || (t > disk.MaxCylinder))
+                {
+                    if (Program.Verbose > 1) Console.Error.WriteLine("Invalid directory segment {0:D0}/{1:D0}: track not present", t, s);
+                    return 0;
+                }
+                if ((s < disk[t, 0].MinSector) || (t > disk[t, 0].MaxSector))
+                {
+                    if (Program.Verbose > 1) Console.Error.WriteLine("Invalid directory segment {0:D0}/{1:D0}: sector not present", t, s);
+                    return 0;
+                }
+                if (SS[t, s] != 0)
+                {
+                    if (Program.Verbose > 1) Console.Error.WriteLine("Invalid directory segment chain: segment {0:D0}/{1:D0} repeated", t, s);
+                    return 0;
+                }
+                SS[t, s] = ++sc;
+                Block b = disk[t, 0, s];
+                t = b[0];
+                s = b[1];
+            }
+            return 1;
+
+            // level 2 - check directory consistency
+            // TODO
+
+            // level 3 - check directory entries
+            // TODO
+
+            // level 4 - check block allocations
+            // TODO
         }
 
         // convert a CBMDOS wildcard pattern to a Regex

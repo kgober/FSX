@@ -20,8 +20,6 @@
 // SOFTWARE.
 
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace FSX
 {
@@ -52,6 +50,7 @@ namespace FSX
         public abstract Int32 MaxCylinder { get; }
         public abstract Int32 MinHead { get; }
         public abstract Int32 MaxHead { get; }
+        public abstract Int32 MinSector();
         public abstract Int32 MinSector(Int32 cylinder, Int32 head);
         public abstract Int32 MaxSector(Int32 cylinder, Int32 head);
         public abstract Block this[Int32 lbn] { get; }
@@ -191,6 +190,11 @@ namespace FSX
         public override Int32 MaxHead
         {
             get { return 0; }
+        }
+
+        public override Int32 MinSector()
+        {
+            return 1;
         }
 
         public override Int32 MinSector(Int32 cylinder, Int32 head)
@@ -429,6 +433,11 @@ namespace FSX
             get { return mMinHead + mHeads - 1; }
         }
 
+        public override Int32 MinSector()
+        {
+            return mMinSect;
+        }
+
         public override Int32 MinSector(Int32 cylinder, Int32 head)
         {
             return mData[cylinder - mMinCyl, head - mMinHead].MinSector;
@@ -553,6 +562,11 @@ namespace FSX
         public override Int32 MaxHead
         {
             get { return mDisk.MaxHead; }
+        }
+
+        public override Int32 MinSector()
+        {
+            return mDisk.MinSector();
         }
 
         public override Int32 MinSector(Int32 cylinder, Int32 head)
@@ -732,6 +746,11 @@ namespace FSX
             get { return 0; }
         }
 
+        public override Int32 MinSector()
+        {
+            return 1;
+        }
+
         public override Int32 MinSector(Int32 cylinder, Int32 head)
         {
             return 1;
@@ -829,6 +848,11 @@ namespace FSX
         public override Int32 MaxHead
         {
             get { return 0; }
+        }
+
+        public override Int32 MinSector()
+        {
+            return 1;
         }
 
         public override Int32 MinSector(Int32 cylinder, Int32 head)

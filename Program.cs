@@ -66,16 +66,7 @@ namespace FSX
             // (none yet)
 
             // import host volumes
-            foreach (DriveInfo d in DriveInfo.GetDrives())
-            {
-                Console.Error.WriteLine("{0} type={1}/{2} ready={3}", d.Name, d.DriveType.ToString(), d.DriveFormat, d.IsReady.ToString());
-                String s = d.Name;
-                if (s.EndsWith(@"\")) s = s.Substring(0, s.Length - 1);
-                if (s.EndsWith(@":")) s = s.Substring(0, s.Length - 1);
-                VDE v = new VDE(s, new HostFS(d.Name, d.DriveFormat));
-                VolMap.Add(v.Key, v);
-                if (Vol.Key == null) Vol = v;
-            }
+            MountHostVolumes();
 
             // command loop
             while (true)
@@ -207,6 +198,23 @@ namespace FSX
                 else
                 {
                     Console.Error.WriteLine("Command not recognized: {0}", cmd);
+                }
+            }
+        }
+
+        static void MountHostVolumes()
+        {
+            foreach (DriveInfo d in DriveInfo.GetDrives())
+            {
+                if (d.IsReady)
+                {
+                    Console.Error.WriteLine("{0} type={1}/{2}", d.Name, d.DriveType.ToString(), d.DriveFormat);
+                    String s = d.Name;
+                    if (s.EndsWith(@"\")) s = s.Substring(0, s.Length - 1);
+                    if (s.EndsWith(@":")) s = s.Substring(0, s.Length - 1);
+                    VDE v = new VDE(s, new HostFS(d.Name, d.DriveFormat));
+                    VolMap.Add(v.Key, v);
+                    if (Vol.Key == null) Vol = v;
                 }
             }
         }

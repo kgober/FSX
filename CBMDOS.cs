@@ -269,8 +269,25 @@ namespace FSX
 
         public override Boolean SaveFS(String fileName, String format)
         {
-            // TODO: implement
-            throw new Exception("The method or operation is not implemented.");
+            Boolean ef = false; // whether any sector errors need to be recorded
+            for (Int32 i = 0; i < mDisk.BlockCount; i++) if ((mDisk[i] is Sector) && ((mDisk[i] as Sector).ErrorCode > 1)) ef = true;
+            FileStream f = new FileStream(fileName, FileMode.Create);
+            Byte[] buf = new Byte[256];
+            for (Int32 i = 0; i < mDisk.BlockCount; i++)
+            {
+                mDisk[i].CopyTo(buf, 0);
+                f.Write(buf, 0, 256);
+            }
+            if (ef)
+            {
+                for (Int32 i = 0; i < mDisk.BlockCount; i++)
+                {
+                    buf[0] = (Byte)((mDisk[i] is Sector) ? (mDisk[i] as Sector).ErrorCode : 1);
+                    f.Write(buf, 0, 1);
+                }
+            }
+            f.Close();
+            return true;
         }
 
         private FileEntry FindFile(String fileName)

@@ -448,7 +448,7 @@ namespace FSX
                     for (Int32 h = 0; h < mHeads; h++)
                     {
                         Track t = mData[c, h];
-                        if (lbn < t.Length) return t[lbn + 1];
+                        if (lbn < t.Length) return t[lbn + mMinSect];
                         lbn -= t.Length;
                     }
                 }

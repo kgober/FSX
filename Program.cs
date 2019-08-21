@@ -19,12 +19,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+
 // File System Exchange (FSX) Program Structure
 //
 // A FileSystem is a file/directory structure and resides on an IVolume (HostFS excepted).
 // An IVolume is a logical block interface to an underlying Disk (or a portion of one).
 // A Disk is a collection of sectors and usually resides in an image file.  Some Disks
 // represent a transformation of an underlying Disk (e.g. clustering or interleaving).
+
 
 using System;
 using System.Collections.Generic;
@@ -566,8 +568,9 @@ namespace FSX
             else if (data.Length == 1247232) // 4872 256-byte sectors (DEC RK02, all tracks used)
             {
                 CHSDisk d = new CHSDisk(source, data, 256, 203, 2, 12);
-                // TODO: try Unix first (DEC operating systems used only 200 tracks)
-                FileSystem fs = RT11.Try(d);
+                FileSystem fs = Unix.Try(d);
+                if (fs != null) return fs;
+                fs = RT11.Try(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
@@ -581,8 +584,9 @@ namespace FSX
             else if (data.Length == 2494464) // 4872 512-byte sectors (DEC RK03, all tracks used)
             {
                 CHSDisk d = new CHSDisk(source, data, 512, 203, 2, 12);
-                // TODO: try Unix first (DEC operating systems used only 200 tracks)
-                FileSystem fs = RT11.Try(d);
+                FileSystem fs = Unix.Try(d);
+                if (fs != null) return fs;
+                fs = RT11.Try(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
@@ -597,7 +601,10 @@ namespace FSX
 
         static FileSystem LoadFS(String source, Disk image)
         {
-            FileSystem fs = RT11.Try(image);
+            FileSystem fs = Unix.Try(image);
+            if (fs != null) return fs;
+
+            fs = RT11.Try(image);
             if (fs != null) return fs;
 
             if (image is CHSDisk) fs = CBMDOS.Try(image as CHSDisk);
@@ -762,6 +769,8 @@ namespace FSX
         [Flags]
         public enum DumpOptions : uint
         {
+            Default = 0,
+            None = 0,
             NoASCII = 1,
             Radix50 = 2,
             EBCDIC = 4,

@@ -178,7 +178,7 @@ namespace FSX
             Int32 ds = HomeBlockChecksumOK(disk[1]) ? disk[1].ToUInt16(0x1d4) : defaultDirStart; // assume directory start at block 6 unless home block value valid
             if (ds + 1 >= disk.BlockCount)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Disk too small to contain directory segment {0:D0", 1);
+                if (Program.Verbose > 1) Console.Error.WriteLine("Disk too small to contain directory segment {0:D0}", 1);
                 return -1;
             }
             if (level == 0) return 0;

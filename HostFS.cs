@@ -19,9 +19,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+
 // HostFS - Host File System
 // The HostFS and HostPath classes provide access to the 'native' host file system,
 // mainly for use as a source or destination for load/save operations.
+
 
 using System;
 using System.IO;

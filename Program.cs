@@ -485,56 +485,56 @@ namespace FSX
             if (data.Length == 252928) // 76 tracks of 26 128-byte sectors (DEC RX01)
             {
                 CHSDisk d = new CHSDisk(source, data, 128, 76, 1, 26);
-                FileSystem fs = RT11.Try(d);
+                FileSystem fs = TryDEC(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 256256) // 77 tracks of 26 128-byte sectors (IBM 3740)
             {
                 CHSDisk d = new CHSDisk(source, data, 128, 77, 1, 26);
-                FileSystem fs = RT11.Try(d);
+                FileSystem fs = TryDEC(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 266240) // 80 tracks of 26 128-byte sectors (raw 8" SSSD diskette)
             {
                 CHSDisk d = new CHSDisk(source, data, 128, 80, 1, 26);
-                FileSystem fs = RT11.Try(d);
+                FileSystem fs = TryDEC(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 295936) // 578 512-byte blocks (DEC TU56 DECTape standard format)
             {
                 LBADisk d = new LBADisk(source, data, 512);
-                FileSystem fs = RT11.Try(d);
+                FileSystem fs = TryDEC(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 409600) // 80 tracks of 10 512-byte sectors (DEC RX50)
             {
                 CHSDisk d = new CHSDisk(source, data, 512, 80, 1, 10);
-                FileSystem fs = RT11.Try(d);
+                FileSystem fs = TryDEC(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 505856) // 76 tracks of 26 256-byte sectors (DEC RX02)
             {
                 CHSDisk d = new CHSDisk(source, data, 256, 76, 1, 26);
-                FileSystem fs = RT11.Try(d);
+                FileSystem fs = TryDEC(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 512512) // 77 tracks of 26 256-byte sectors (IBM 3740)
             {
                 CHSDisk d = new CHSDisk(source, data, 256, 77, 1, 26);
-                FileSystem fs = RT11.Try(d);
+                FileSystem fs = TryDEC(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 532480) // 80 tracks of 26 256-byte sectors (raw 8" SSDD diskette)
             {
                 CHSDisk d = new CHSDisk(source, data, 256, 80, 1, 26);
-                FileSystem fs = RT11.Try(d);
+                FileSystem fs = TryDEC(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
@@ -561,7 +561,7 @@ namespace FSX
             else if (data.Length == 1228800) // 4800 256-byte sectors (DEC RK02, 3 spare tracks)
             {
                 CHSDisk d = new CHSDisk(source, data, 256, 200, 2, 12);
-                FileSystem fs = RT11.Try(d);
+                FileSystem fs = TryDEC(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
@@ -570,14 +570,14 @@ namespace FSX
                 CHSDisk d = new CHSDisk(source, data, 256, 203, 2, 12);
                 FileSystem fs = Unix.Try(d);
                 if (fs != null) return fs;
-                fs = RT11.Try(d);
+                fs = TryDEC(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 2457600) // 4800 512-byte sectors (DEC RK03, 3 spare tracks)
             {
                 CHSDisk d = new CHSDisk(source, data, 512, 200, 2, 12);
-                FileSystem fs = RT11.Try(d);
+                FileSystem fs = TryDEC(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
@@ -586,7 +586,7 @@ namespace FSX
                 CHSDisk d = new CHSDisk(source, data, 512, 203, 2, 12);
                 FileSystem fs = Unix.Try(d);
                 if (fs != null) return fs;
-                fs = RT11.Try(d);
+                fs = TryDEC(d);
                 if (fs != null) return fs;
                 return LoadFS(source, d);
             }
@@ -604,13 +604,96 @@ namespace FSX
             FileSystem fs = Unix.Try(image);
             if (fs != null) return fs;
 
-            fs = RT11.Try(image);
+            fs = TryDEC(image);
             if (fs != null) return fs;
 
             if (image is CHSDisk) fs = CBMDOS.Try(image as CHSDisk);
             if (fs != null) return fs;
 
             return null;
+        }
+
+        static FileSystem TryDEC(Disk disk)
+        {
+            if (Program.Verbose > 1) Console.Error.WriteLine("TryDEC: {0}", disk.Source);
+
+            // check basic disk parameters
+            if ((disk is CHSDisk) && (disk.BlockSize != 512) && ((512 % disk.BlockSize) == 0))
+            {
+                if ((disk.BlockSize == 128) && (disk.MaxSector(0, 0) == 26) && (disk.BlockCount == 1976))
+                {
+                    // 76 tracks, probably an RX01 image with track 0 skipped
+                    Boolean b8 = IsASCIIText(disk[0, 0, 8], 0x58, 24); // look for volume label in track 0, sector 8 (no interleave)
+                    Boolean b15 = IsASCIIText(disk[0, 0, 15], 0x58, 24); // look for volume label in track 0, sector 15 (2:1 'soft' interleave)
+                    FileSystem fs = null;
+                    if (b8 && !b15) fs = TryDEC(new ClusteredDisk(disk, 4, 0));
+                    else if (b15 && !b8) fs = TryDEC(new ClusteredDisk(new InterleavedDisk(disk as CHSDisk, 2, 0, 6, 0), 4, 0));
+                    if (fs == null) fs = TryDEC(new ClusteredDisk(disk, 4, 0));
+                    return (fs != null) ? fs : TryDEC(new ClusteredDisk(new InterleavedDisk(disk as CHSDisk, 2, 0, 6, 0), 4, 0));
+                }
+                if ((disk.BlockSize == 128) && (disk.MaxSector(0, 0) == 26) && ((disk.BlockCount == 2002) || (disk.BlockCount == 2080)))
+                {
+                    // 77 or 80 tracks, probably a full RX01 image including track 0
+                    Boolean b8 = IsASCIIText(disk[1, 0, 8], 0x58, 24); // look for volume label in track 1, sector 8 (no interleave)
+                    Boolean b15 = IsASCIIText(disk[1, 0, 15], 0x58, 24); // look for volume label in track 1, sector 15 (2:1 'soft' interleave)
+                    FileSystem fs = null;
+                    if (b8 && !b15) fs = TryDEC(new ClusteredDisk(disk, 4, 26));
+                    else if (b15 && !b8) fs = TryDEC(new ClusteredDisk(new InterleavedDisk(disk as CHSDisk, 2, 0, 6, 26), 4, 26));
+                    if (fs == null) fs = TryDEC(new ClusteredDisk(new InterleavedDisk(disk as CHSDisk, 2, 0, 6, 26), 4, 26));
+                    return (fs != null) ? fs : TryDEC(new ClusteredDisk(disk, 4, 26));
+                }
+                if ((disk.BlockSize == 256) && (disk.MaxSector(0, 0) == 26) && (disk.BlockCount == 1976))
+                {
+                    // 76 tracs, probably an RX02 image with track 0 skipped
+                    Boolean b4 = IsASCIIText(disk[0, 0, 4], 0x58, 24); // look for volume label in track 0, sector 4 (no interleave)
+                    Boolean b7 = IsASCIIText(disk[0, 0, 7], 0x58, 24); // look for volume label in track 0, sector 7 (2:1 'soft' interleave)
+                    FileSystem fs = null;
+                    if (b4 && !b7) fs = TryDEC(new ClusteredDisk(disk, 2, 0));
+                    else if (b7 && !b4) fs = TryDEC(new ClusteredDisk(new InterleavedDisk(disk as CHSDisk, 2, 0, 6, 0), 2, 0));
+                    if (fs == null) fs = TryDEC(new ClusteredDisk(disk, 2, 0));
+                    return (fs != null) ? fs : TryDEC(new ClusteredDisk(new InterleavedDisk(disk as CHSDisk, 2, 0, 6, 0), 2, 0));
+                }
+                if ((disk.BlockSize == 256) && (disk.MaxSector(0, 0) == 26) && ((disk.BlockCount == 2002) || (disk.BlockCount == 2080)))
+                {
+                    // 77 or 80 tracks, probably a full RX02 image including track 0
+                    Boolean b4 = IsASCIIText(disk[1, 0, 4], 0x58, 24); // look for volume label in track 1, sector 4 (no interleave)
+                    Boolean b7 = IsASCIIText(disk[1, 0, 7], 0x58, 24); // look for volume label in track 1, sector 7 (2:1 'soft' interleave)
+                    FileSystem fs = null;
+                    if (b4 && !b7) fs = TryDEC(new ClusteredDisk(disk, 2, 26));
+                    else if (b7 && !b4) fs = TryDEC(new ClusteredDisk(new InterleavedDisk(disk as CHSDisk, 2, 0, 6, 26), 2, 26));
+                    if (fs == null) fs = TryDEC(new ClusteredDisk(new InterleavedDisk(disk as CHSDisk, 2, 0, 6, 26), 2, 26));
+                    return (fs != null) ? fs : TryDEC(new ClusteredDisk(disk, 2, 26));
+                }
+                return TryDEC(new ClusteredDisk(disk, 512 / disk.BlockSize, 0));
+            }
+            else if ((disk is CHSDisk) && (disk.BlockSize == 512))
+            {
+                if ((disk.MaxSector(0, 0) == 10) && (disk.BlockCount == 800))
+                {
+                    // probably an RX50 image
+                    Boolean b2 = IsASCIIText(disk[0, 0, 2], 0x1d8, 24); // look for volume label in track 0, sector 2 (no interleave)
+                    Boolean b3 = IsASCIIText(disk[0, 0, 3], 0x1d8, 24); // look for volume label in track 0, sector 3 (2:1 'soft' interleave)
+                    FileSystem fs = null;
+                    if (b3 && !b2) fs = TryDEC(new InterleavedDisk(disk as CHSDisk, 2, 0, 2, 0));
+                    if (fs != null) return fs;
+                }
+            }
+            else if ((disk.BlockSize != 512) && ((512 % disk.BlockSize) == 0))
+            {
+                return TryDEC(new ClusteredDisk(disk, 512 / disk.BlockSize, 0));
+            }
+            else if (disk.BlockSize != 512)
+            {
+                if (Program.Verbose > 1) Console.Error.WriteLine("Volume block size = {0:D0} (must be 512)", disk.BlockSize);
+                return null;
+            }
+
+            // check disk structure
+            if (ODS1.CheckVTOC(disk, 1) == 1) return new ODS1(disk);
+            Int32 size = RT11.CheckVTOC(disk, 3);
+            if (size < 3) return null;
+            else if (size != disk.BlockCount) return new RT11(new PaddedDisk(disk, size - disk.BlockCount));
+            else return new RT11(disk);
         }
 
         static Byte[] DecompressGZip(Byte[] data)

@@ -435,7 +435,7 @@ namespace FSX
             {
                 Byte[] buf = new Byte[36];
                 B.CopyTo(buf, 0, 0x1d8, 36);
-                output.WriteLine(" System ID: {0} {1}", Encoding.ASCII.GetString(buf, 24, 12), Radix50.Convert(w));
+                output.WriteLine(" System ID: {0} {1}", Encoding.ASCII.GetString(buf, 24, 12), (w == 0x2020) ? null : Radix50.Convert(w));
                 output.WriteLine(" Volume ID: {0}", Encoding.ASCII.GetString(buf, 0, 12));
                 output.WriteLine(" Owner    : {0}", Encoding.ASCII.GetString(buf, 12, 12));
             }

@@ -158,14 +158,14 @@ namespace FSX
             public static Inode FromBlock(Block block, Int32 offset)
             {
                 Inode I = new Inode();
-                I.flags = (Iflags)block.ToUInt16(offset);
-                I.nlinks = block[offset += 2];
-                I.uid = block[++offset];
-                I.gid = block[++offset];
-                I.size = block[++offset] << 16;
-                I.size += block.ToUInt16(++offset);
+                I.flags = (Iflags)block.ToUInt16(ref offset);
+                I.nlinks = block[offset++];
+                I.uid = block[offset++];
+                I.gid = block[offset++];
+                I.size = block[offset++] << 16;
+                I.size += block.ToUInt16(ref offset);
                 I.addr = new UInt16[8];
-                for (Int32 i = 0; i < 8; i++) I.addr[i] = block.ToUInt16(offset += 2);
+                for (Int32 i = 0; i < 8; i++) I.addr[i] = block.ToUInt16(ref offset);
                 return I;
             }
         }

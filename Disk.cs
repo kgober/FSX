@@ -31,6 +31,7 @@ namespace FSX
         public abstract void CopyTo(Byte[] targetBuffer, Int32 targetOffset);
         public abstract void CopyTo(Byte[] targetBuffer, Int32 targetOffset, Int32 blockOffset, Int32 count);
         public abstract UInt16 ToUInt16(Int32 startIndex);
+        public abstract UInt16 ToUInt16(ref Int32 startIndex);
     }
 
     interface IVolume
@@ -119,6 +120,13 @@ namespace FSX
         public override UInt16 ToUInt16(Int32 startIndex)
         {
             return BitConverter.ToUInt16(mData, startIndex);
+        }
+
+        public override UInt16 ToUInt16(ref Int32 startIndex)
+        {
+            UInt16 n = BitConverter.ToUInt16(mData, startIndex);
+            startIndex += 2;
+            return n;
         }
     }
 
@@ -667,13 +675,28 @@ namespace FSX
 
             public override UInt16 ToUInt16(Int32 startIndex)
             {
+                Int32 i = startIndex;
+                return ToUInt16(ref i);
+            }
+
+            public override UInt16 ToUInt16(ref Int32 startIndex)
+            {
                 Int32 p = startIndex / mBlockSize;
                 Int32 q = startIndex % mBlockSize;
-                if (q + 1 < mBlockSize) return mData[p].ToUInt16(q);
-                Byte[] buf = new Byte[2];
-                buf[0] = mData[p][q];
-                buf[1] = mData[p + 1][0];
-                return BitConverter.ToUInt16(buf, 0);
+                UInt16 n;
+                if (q + 1 < mBlockSize)
+                {
+                    n = mData[p].ToUInt16(q);
+                }
+                else
+                {
+                    Byte[] buf = new Byte[2];
+                    buf[0] = mData[p][q];
+                    buf[1] = mData[p + 1][0];
+                    n = BitConverter.ToUInt16(buf, 0);
+                }
+                startIndex += 2;
+                return n;
             }
         }
 

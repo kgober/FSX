@@ -39,7 +39,7 @@
 //  30  H.VOWN  Volume Owner UIC
 //  32  H.VPRO  Volume Protection Code
 //  34  H.VCHA  Volume Characteristics
-//  36  H.FPRO  Default File Protection
+//  36  H.DFPR  Default File Protection
 //  38          (not used)
 //  44  H.WISZ  Default Window Size
 //  45  H.FIEX  Default File Extend
@@ -196,7 +196,7 @@ namespace FSX
         public ODS1(Disk disk)
         {
             mDisk = disk;
-            mDir = "[000000]";
+            mDir = "[0,0]";
             mDirNum = 4;
             mDirSeq = 4;
         }
@@ -229,16 +229,24 @@ namespace FSX
         public override void ChangeDir(String dirSpec)
         {
             if ((dirSpec == null) || (dirSpec.Length == 0)) return;
-            // special-case [000000] to mean the root directory 4,4,0
-            if (String.Compare(dirSpec, "[000000]") == 0)
+
+            Int32 p = dirSpec.IndexOf('[');
+            if (p != -1)
             {
-                mDir = "[000000]";
-                mDirNum = 4;
-                mDirSeq = 4;
-                return;
+                dirSpec = dirSpec.Substring(p + 1);
+                p = dirSpec.IndexOf(']');
+                if (p == -1) return;
+                dirSpec = dirSpec.Substring(0, p);
             }
-            // otherwise look for a match in the current directory
-            Byte[] data = ReadFile(mDirNum, mDirSeq, 0);
+            p = dirSpec.IndexOf(',');
+            if (p != -1)
+            {
+                Byte m, n;
+                if (!Byte.TryParse(dirSpec.Substring(0, p), out m) || !Byte.TryParse(dirSpec.Substring(p + 1), out n)) return;
+                dirSpec = String.Format("{0:D3}{1:D3}", m, n);
+            }
+
+            Byte[] data = ReadFile(4, 4, 0);
             Int32 bp = 0;
             while (bp < data.Length)
             {
@@ -249,10 +257,14 @@ namespace FSX
                     String fn2 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 8));
                     String fn3 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 10));
                     String fn = String.Concat(fn1, fn2, fn3).Trim();
-                    fn = String.Concat("[", fn, "]");
                     if (String.Compare(dirSpec, fn, StringComparison.OrdinalIgnoreCase) == 0)
                     {
-                        mDir = fn;
+                        Boolean f = false;
+                        if (fn.Length == 6)
+                        {
+                            for (Int32 i = 0; i < 6; i++) if (!Char.IsDigit(fn, i)) f = true;
+                        }
+                        mDir = (f) ? String.Concat("[", fn, "]") : String.Format("[{0:D0},{1:D0}]", Byte.Parse(fn.Substring(0, 3)), Byte.Parse(fn.Substring(3, 3)));
                         mDirNum = fnum;
                         mDirSeq = BitConverter.ToUInt16(data, bp + 2);
                         return;

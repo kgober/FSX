@@ -59,7 +59,7 @@ namespace FSX
         static public TextWriter Out = Console.Out;
         static public VDE Vol;
         static public Int32 Verbose = 0;
-        static public Int32 Debug = 0;
+        static public Int32 DebugLevel = 0;
 
         static private Dictionary<String, VDE> VolMap = new Dictionary<String, VDE>(StringComparer.OrdinalIgnoreCase);
 
@@ -74,13 +74,14 @@ namespace FSX
             // command loop
             while (true)
             {
+                String cmd, arg;
                 Console.Error.Write("\nFSX>");
-                String cmdline = Console.In.ReadLine();
-                cmdline = cmdline.TrimStart(' ', '\t');
-                Int32 p = cmdline.IndexOf(' ');
-                String cmd = (p == -1) ? cmdline : cmdline.Substring(0, p);
-                String arg = (p == -1) ? String.Empty : cmdline.Substring(p + 1);
-                if ((cmd == "exit") || (cmd == "quit"))
+                if (!ReadCommand(out cmd, out arg))
+                {
+                    Console.Error.WriteLine();
+                    break;
+                }
+                else if ((cmd == "exit") || (cmd == "quit"))
                 {
                     break;
                 }
@@ -90,11 +91,13 @@ namespace FSX
                 }
                 else if ((cmd == "verb") || (cmd == "verbose"))
                 {
-                    Int32.TryParse(arg, out Verbose);
+                    Int32 n;
+                    if (Int32.TryParse(arg, out n)) Verbose = n;
                 }
                 else if ((cmd == "deb") || (cmd == "debug"))
                 {
-                    Int32.TryParse(arg, out Debug);
+                    Int32 n;
+                    if (Int32.TryParse(arg, out n)) DebugLevel = n;
                 }
                 else if ((cmd == "vols") || (cmd == "volumes"))
                 {
@@ -105,7 +108,7 @@ namespace FSX
                 }
                 else if ((cmd == "load") || (cmd == "mount"))
                 {
-                    p = arg.IndexOf(' ');
+                    Int32 p = arg.IndexOf(' ');
                     String s = (p == -1) ? arg : arg.Substring(0, p);       // volume name
                     arg = (p == -1) ? String.Empty : arg.Substring(p + 1);  // volume source
                     if (s.EndsWith(@"\")) s = s.Substring(0, s.Length - 1);
@@ -122,7 +125,7 @@ namespace FSX
                 }
                 else if ((cmd == "save") || (cmd == "write"))
                 {
-                    p = arg.IndexOf(' ');
+                    Int32 p = arg.IndexOf(' ');
                     String s = (p == -1) ? arg : arg.Substring(0, p);       // source volume/file
                     arg = (p == -1) ? String.Empty : arg.Substring(p + 1);  // target file
                     VDE src = ParseVol(ref s);
@@ -146,7 +149,7 @@ namespace FSX
                 }
                 else if ((cmd == "unload") || (cmd == "unmount") || (cmd == "umount"))
                 {
-                    p = arg.IndexOf(':');
+                    Int32 p = arg.IndexOf(':');
                     String k = (p == -1) ? arg : arg.Substring(0, p);
                     if (VolMap.ContainsKey(k))
                     {
@@ -202,7 +205,7 @@ namespace FSX
                     String k = cmd.Substring(0, cmd.Length - 1);
                     if (VolMap.ContainsKey(k)) Vol = VolMap[k];
                 }
-                else
+                else if (cmd != "")
                 {
                     Console.Error.WriteLine("Command not recognized: {0}", cmd);
                 }
@@ -213,17 +216,39 @@ namespace FSX
         {
             foreach (DriveInfo d in DriveInfo.GetDrives())
             {
-                if (d.IsReady)
-                {
-                    Console.Error.WriteLine("{0} type={1}/{2}", d.Name, d.DriveType.ToString(), d.DriveFormat);
-                    String s = d.Name;
-                    if (s.EndsWith(@"\")) s = s.Substring(0, s.Length - 1);
-                    if (s.EndsWith(@":")) s = s.Substring(0, s.Length - 1);
-                    VDE v = new VDE(s, new HostFS(d.Name, d.DriveFormat));
-                    VolMap.Add(v.Key, v);
-                    if (Vol.Key == null) Vol = v;
-                }
+                if (!d.IsReady) continue;
+                String s = d.Name;
+                if (s.EndsWith(@"\")) s = s.Substring(0, s.Length - 1);
+                if (s.EndsWith(@":")) s = s.Substring(0, s.Length - 1);
+                VDE v = new VDE(s, new HostFS(d.Name, d.DriveFormat));
+                VolMap.Add(v.Key, v);
+                if (Vol.Key == null) Vol = v;
+                Console.Error.WriteLine("{0}: = {1} [{2}]", s, d.Name, v.FS.Type);
             }
+        }
+
+        static Boolean ReadCommand(out String command, out String arg)
+        {
+            // read one line
+            String line = Console.In.ReadLine();
+            if (line == null)
+            {
+                command = null;
+                arg = null;
+                return false;
+            }
+
+            // remove leading white space
+            Int32 p = 0;
+            while ((p < line.Length) && ((line[p] == ' ') || (line[p] == '\t'))) p++;
+            line = line.Substring(p);
+
+            // separate command and arg
+            // TODO: return arg array and allow arg quoting
+            p = line.IndexOf(' ');
+            command = (p == -1) ? line : line.Substring(0, p);
+            arg = (p == -1) ? String.Empty : line.Substring(p + 1);
+            return true;
         }
 
         static VDE ParseVol(ref String pathSpec)
@@ -620,7 +645,7 @@ namespace FSX
 
         static FileSystem TryDEC(Disk disk)
         {
-            if (Program.Debug > 1) Console.Error.WriteLine("TryDEC: {0}", disk.Source);
+            Program.Debug(1, "TryDEC: {0}", disk.Source);
 
             // check basic disk parameters
             if ((disk is CHSDisk) && (disk.BlockSize != 512) && ((512 % disk.BlockSize) == 0) && (disk.MinCylinder == 0) && (disk.MinSector() == 1))
@@ -689,7 +714,7 @@ namespace FSX
             }
             else if (disk.BlockSize != 512)
             {
-                if (Program.Debug > 1) Console.Error.WriteLine("Volume block size = {0:D0} (must be 512)", disk.BlockSize);
+                Program.Debug(1, "Volume block size = {0:D0} (must be 512)", disk.BlockSize);
                 return null;
             }
 
@@ -1010,6 +1035,12 @@ namespace FSX
                     n = bytesPerSection;
                 }
             }
+        }
+
+        static public void Debug(Int32 messageLevel, String format, params Object[] args)
+        {
+            if (DebugLevel < messageLevel) return;
+            Console.Error.WriteLine(format, args);
         }
     }
 }

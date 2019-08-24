@@ -52,7 +52,7 @@ namespace FSX
     {
         public static FileSystem Try(CHSDisk disk)
         {
-            if (Program.Debug > 1) Console.Error.WriteLine("CBMDOS.Try: {0}", disk.Source);
+            Program.Debug(1, "CBMDOS.Try: {0}", disk.Source);
 
             if (CheckVTOC(disk, 1) < 1) return null;
             else return new CBMDOS(disk);
@@ -68,37 +68,37 @@ namespace FSX
             // level 0 - check basic disk parameters
             if (disk.BlockSize != 256)
             {
-                if (Program.Debug > 1) Console.Error.WriteLine("Disk block size = {0:D0} (must be 256)", disk.BlockSize);
+                Program.Debug(1, "Disk block size = {0:D0} (must be 256)", disk.BlockSize);
                 return -1;
             }
             if (disk.MinHead != disk.MaxHead)
             {
-                if (Program.Debug > 1) Console.Error.WriteLine("Disk must be logically single-sided");
+                Program.Debug(1, "Disk must be logically single-sided");
                 return -1;
             }
             if (disk.MinCylinder < 1)
             {
-                if (Program.Debug > 1) Console.Error.WriteLine("Disk track numbering must start at 1 (is {0:D0})", disk.MinCylinder);
+                Program.Debug(1, "Disk track numbering must start at 1 (is {0:D0})", disk.MinCylinder);
                 return -1;
             }
             if (disk.MinSector() != 0)
             {
-                if (Program.Debug > 1) Console.Error.WriteLine("Disk sector numbering must start at 0 (is {0:D0})", disk.MinSector());
+                Program.Debug(1, "Disk sector numbering must start at 0 (is {0:D0})", disk.MinSector());
                 return -1;
             }
             if (disk.MaxCylinder < 18)
             {
-                if (Program.Debug > 1) Console.Error.WriteLine("Disk too small to contain directory track");
+                Program.Debug(1, "Disk too small to contain directory track");
                 return -1;
             }
             if ((disk.MaxCylinder <= 42) && (disk.MinCylinder > 18))
             {
-                if (Program.Debug > 1) Console.Error.WriteLine("Disk too small to contain directory track 18");
+                Program.Debug(1, "Disk too small to contain directory track 18");
                 return -1;
             }
             if ((disk.MaxCylinder > 42) && (disk.MinCylinder > 39))
             {
-                if (Program.Debug > 1) Console.Error.WriteLine("Disk too small to contain directory track 39");
+                Program.Debug(1, "Disk too small to contain directory track 39");
                 return -1;
             }
             Int32 ms = -1;
@@ -114,17 +114,17 @@ namespace FSX
             {
                 if ((t < disk.MinCylinder) || (t > disk.MaxCylinder))
                 {
-                    if (Program.Debug > 1) Console.Error.WriteLine("Invalid directory segment {0:D0}/{1:D0}: track not present", t, s);
+                    Program.Debug(1, "Invalid directory segment {0:D0}/{1:D0}: track not present", t, s);
                     return 0;
                 }
                 if ((s < disk[t, 0].MinSector) || (s > disk[t, 0].MaxSector))
                 {
-                    if (Program.Debug > 1) Console.Error.WriteLine("Invalid directory segment {0:D0}/{1:D0}: sector not present", t, s);
+                    Program.Debug(1, "Invalid directory segment {0:D0}/{1:D0}: sector not present", t, s);
                     return 0;
                 }
                 if (SS[t, s] != 0)
                 {
-                    if (Program.Debug > 1) Console.Error.WriteLine("Invalid directory segment chain: segment {0:D0}/{1:D0} repeated", t, s);
+                    Program.Debug(1, "Invalid directory segment chain: segment {0:D0}/{1:D0} repeated", t, s);
                     return 0;
                 }
                 SS[t, s] = ++sc;
@@ -149,10 +149,10 @@ namespace FSX
         {
             String p = pattern;
             Int32 i = p.IndexOf('*');
-            if (i != -1) p = p.Substring(0, i + 1);
+            if (i != -1) p = p.Substring(0, i + 1); // anything after * is irrelevant
             p = p.Replace("?", ".").Replace("*", @".*");
             p = String.Concat("^", p, "$");
-            if (Program.Debug > 2) Console.Error.WriteLine("Regex: {0} => {1}", pattern, p);
+            Program.Debug(2, "Regex: {0} => {1}", pattern, p);
             return new Regex(p, RegexOptions.IgnoreCase);
         }
     }
@@ -359,6 +359,12 @@ namespace FSX
 
         public override Boolean SaveFS(String fileName, String format)
         {
+            if ((fileName == null) || (fileName.Length == 0)) return false;
+            if (fileName.IndexOf('.') == -1)
+            {
+                // TODO: infer file extension based on disk size and/or DOS version
+            }
+
             Boolean ef = false; // whether any sector errors need to be recorded
             for (Int32 i = 0; i < mDisk.BlockCount; i++) if ((mDisk[i] is Sector) && ((mDisk[i] as Sector).ErrorCode > 1)) ef = true;
             FileStream f = new FileStream(fileName, FileMode.Create);

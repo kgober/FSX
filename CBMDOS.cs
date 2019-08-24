@@ -54,16 +54,17 @@ namespace FSX
         {
             Program.Debug(1, "CBMDOS.Try: {0}", disk.Source);
 
-            if (CheckVTOC(disk, 1) < 1) return null;
+            if (CheckVTOC(disk, 2) < 2) return null;
             else return new CBMDOS(disk);
         }
 
         // level 0 - check basic disk parameters
         // level 1 - check directory length
+        // level 2 - check directory consistency
         public static Int32 CheckVTOC(CHSDisk disk, Int32 level)
         {
             if (disk == null) throw new ArgumentNullException("disk");
-            if ((level < 0) || (level > 1)) throw new ArgumentOutOfRangeException("level");
+            if ((level < 0) || (level > 2)) throw new ArgumentOutOfRangeException("level");
 
             // level 0 - check basic disk parameters
             if (disk.BlockSize != 256)
@@ -128,14 +129,127 @@ namespace FSX
                     return 0;
                 }
                 SS[t, s] = ++sc;
-                Block b = disk[t, 0, s];
-                t = b[0];
-                s = b[1];
+                Block B = disk[t, 0, s];
+                t = B[0];
+                s = B[1];
             }
-            return 1;
+            if (level == 1) return 1;
 
             // level 2 - check directory consistency
-            // TODO
+            t = (disk.MaxCylinder <= 42) ? 18 : 39;
+            s = 0;
+            Int32 ver = -1;
+            Int32 bc = -1; // blocks preceding first directory block
+            Int32 bt = 1; // expected start track in next BAM block
+            while (t != 0)
+            {
+                Block B = disk[t, 0, s];
+                Int32 l = (B[0] == 0) ? B[1] + 1 : B.Size;
+                Boolean f = false;
+                if (ver == -1)
+                {
+                    ver = B[2];
+                    if (ver == 1)
+                    {
+                        bc = 1; // BAM/Header 
+                        if ((B[165] != 160) || (B[166] != 160)) // 2 shifted spaces
+                        {
+                            Program.Debug(1, "Unrecognized DOS version/format in directory header (expected 0x2020, was 0x{0:X2}{1:X2})", B[165], B[166]);
+                            return 1;
+                        }
+                    }
+                    else if (ver == 65)
+                    {
+                        bc = 1; // BAM/Header
+                        if ((B[165] != 50) || (B[166] != 65)) // "2A"
+                        {
+                            Program.Debug(1, "Unrecognized DOS version/format in directory header (expected 0x3241 \"2A\", was 0x{0:X2}{1:X2})", B[165], B[166]);
+                            return 1;
+                        }
+                    }
+                    else if (ver == 67)
+                    {
+                        f = true;
+                        bc = (disk.MaxCylinder > 77) ? 5 : 3; // Header block and 2 or 4 BAM blocks
+                        if ((B[27] != 50) || (B[28] != 67)) // "2C"
+                        {
+                            Program.Debug(1, "Unrecognized DOS version/format in directory header (expected 0x3243 \"2C\", was 0x{0:X2}{1:X2})", B[27], B[28]);
+                            return 1;
+                        }
+                    }
+                    else
+                    {
+                        Program.Debug(1, "Unrecognized BAM format {0:D0} (expected 1, 65, or 67)", ver);
+                        return 1;
+                    }
+                }
+                if (bc > 0)
+                {
+                    bc--;
+                    if (!f)
+                    {
+                        // this is a BAM block
+                        if (B[2] != ver)
+                        {
+                            Program.Debug(1, "BAM format mismatch in {0:D0}/{1:D0} (is {2:D0}, expected {3:D0})", t, s, B[2], ver);
+                            return 1;
+                        }
+                        if (ver == 67) // start/limit tracks only present in DOS 2.5/2.7
+                        {
+                            if (B[4] != bt)
+                            {
+                                Program.Debug(1, "BAM coverage error in {0:D0}/{1:D0} (start track is {2:D0}, expected {3:D0})", t, s, B[4], bt);
+                                return 1;
+                            }
+                            if (B[5] <= bt)
+                            {
+                                Program.Debug(1, "BAM coverage error in {0:D0}/{1:D0} (limit track is {2:D0}, expected n > {3:D0})", t, s, B[5], bt);
+                                return 1;
+                            }
+                            bt = B[5];
+                        }
+                    }
+                }
+                else
+                {
+                    // this is a directory block
+                    for (Int32 bp = 2; bp < l; bp += 32)
+                    {
+                        Byte b = B[bp]; // file type
+                        if (b == 0) continue; // directory entry not in use
+                        Boolean fClosed = ((b & 0x80) != 0);
+                        Boolean fLocked = ((b & 0x40) != 0);
+                        Boolean fSaveAt = ((b & 0x20) != 0);
+                        Int32 fType = b & 0x1f;
+                        if (fType > 4)
+                        {
+                            Program.Debug(1, "Illegal file type in directory entry 0x{0:X2} of {1:D0}/{2:D0} (is {3:D0}, expected 0 <= n <= 4)", bp, t, s, fType);
+                            return 1;
+                        }
+                        Int32 ft = B[bp + 1]; // track of first block
+                        if ((ft < disk.MinCylinder) || (ft > disk.MaxCylinder))
+                        {
+                            Program.Debug(1, "Illegal start track in directory entry 0x{0:X2} of {1:D0}/{2:D0} (is {3:D0}, expected {4:D0} <= n <= {5:D0})", bp, t, s, ft, disk.MinCylinder, disk.MaxCylinder);
+                            return 1;
+                        }
+                        Int32 fs = B[bp + 2]; // sector of first block
+                        if ((fs < disk.MinSector(ft, 0)) || (fs > disk.MaxSector(ft, 0)))
+                        {
+                            Program.Debug(1, "Illegal start sector in directory entry 0x{0:X2} of {1:D0}/{2:D0} (is {3:D0}, expected {4:D0} <= n <= {5:D0})", bp, t, s, fs, disk.MinSector(ft, 0), disk.MaxSector(ft, 0));
+                            return 1;
+                        }
+                        Int32 n = B.ToUInt16(bp + 28); // file block count
+                        if (n > (disk.BlockCount - sc))
+                        {
+                            Program.Debug(1, "Illegal block count in directory entry 0x{0:X2} of {1:D0}/{2:D0} (is {3:D0}, expected 0 <= n <= {4:D0})", bp, t, s, n, disk.BlockCount - sc);
+                            return 1;
+                        }
+                    }
+                }
+                t = B[0];
+                s = B[1];
+            }
+            return 2;
 
             // level 3 - check directory entries
             // TODO
@@ -253,11 +367,11 @@ namespace FSX
             while (t != 0)
             {
                 B = mDisk[t, 0, s];
-                for (Int32 bp = 0; bp < B.Size; bp += 32)
+                for (Int32 bp = 2; bp < B.Size; bp += 32)
                 {
-                    Byte b = B[bp + 2];
+                    Byte b = B[bp];
                     if (b == 0) continue;
-                    B.CopyTo(buf, 0, bp + 5, 24);
+                    B.CopyTo(buf, 0, bp + 3, 24);
                     String fn = PETSCII1.Encoding.GetString(buf, 0, 16);
                     while (fn.EndsWith("\u00a0")) fn = fn.Substring(0, fn.Length - 1);
                     if (RE.IsMatch(fn))
@@ -267,7 +381,7 @@ namespace FSX
                         Char lf = ((b & 0x40) != 0) ? '>' : ' ';
                         Char cf = ((b & 0x80) != 0) ? ' ' : '*';
                         fn = String.Concat("\"", fn, "\"");
-                        Int32 sz = B.ToUInt16(bp + 30);
+                        Int32 sz = B.ToUInt16(bp + 28);
                         output.WriteLine("{0,-4:D0} {1,-18}{2}{3}{4}", sz, fn, lf, ft, cf);
                     }
                 }
@@ -410,14 +524,14 @@ namespace FSX
             while (t != 0)
             {
                 Block B = mDisk[t, 0, s];
-                for (Int32 bp = 0; bp < B.Size; bp += 32)
+                for (Int32 bp = 2; bp < B.Size; bp += 32)
                 {
-                    Byte b = B[bp + 2];
+                    Byte b = B[bp];
                     if (b == 0) continue;
-                    B.CopyTo(buf, 0, bp + 5, 16);
+                    B.CopyTo(buf, 0, bp + 3, 16);
                     String fn = PETSCII1.Encoding.GetString(buf, 0, 16);
                     while (fn.EndsWith("\u00a0")) fn = fn.Substring(0, fn.Length - 1);
-                    if (RE.IsMatch(fn)) return new FileEntry(fn, B[bp + 3], B[bp + 4], -1);
+                    if (RE.IsMatch(fn)) return new FileEntry(fn, B[bp + 1], B[bp + 2], -1);
                 }
                 t = B[0];
                 s = B[1];

@@ -93,7 +93,7 @@ namespace FSX
             // level 0 - check basic disk parameters
             if (disk.BlockSize != 512)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Disk block size = {0:D0} (must be 512)", disk.BlockSize);
+                if (Program.Debug > 1) Console.Error.WriteLine("Disk block size = {0:D0} (must be 512)", disk.BlockSize);
                 return -1;
             }
 
@@ -101,7 +101,7 @@ namespace FSX
             Int32 ds = HomeBlockChecksumOK(disk[1]) ? disk[1].ToUInt16(0x1d4) : defaultDirStart; // assume directory start at block 6 unless home block value valid
             if (ds + 1 >= disk.BlockCount)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Disk too small to contain directory segment {0:D0}", 1);
+                if (Program.Debug > 1) Console.Error.WriteLine("Disk too small to contain directory segment {0:D0}", 1);
                 return -1;
             }
             if (level == 0) return 0;
@@ -115,19 +115,19 @@ namespace FSX
             {
                 if (SS[s] != 0)
                 {
-                    if (Program.Verbose > 1) Console.Error.WriteLine("Invalid directory segment chain: segment {0:D0} repeated", s);
+                    if (Program.Debug > 1) Console.Error.WriteLine("Invalid directory segment chain: segment {0:D0} repeated", s);
                     return 0;
                 }
                 SS[s] = ++sc;
                 s = dir[s].ToUInt16(2); // next directory segment
                 if (s > 31)
                 {
-                    if (Program.Verbose > 1) Console.Error.WriteLine("Invalid directory segment chain: segment {0:D0} invalid", s);
+                    if (Program.Debug > 1) Console.Error.WriteLine("Invalid directory segment chain: segment {0:D0} invalid", s);
                     return 0;
                 }
                 if (s >= dir.BlockCount)
                 {
-                    if (Program.Verbose > 1) Console.Error.WriteLine("Disk too small to contain directory segment {0:D0}", s);
+                    if (Program.Debug > 1) Console.Error.WriteLine("Disk too small to contain directory segment {0:D0}", s);
                     return 0;
                 }
             }
@@ -145,31 +145,31 @@ namespace FSX
                 if ((ns == -1) && (n >= sc) && (n < 32)) ns = n;
                 else if ((s == 1) || ((s != 1) && (n != ns) && (n != 0))) // despite docs, this might be zero in segments other than the first
                 {
-                    if (Program.Verbose > 1) Console.Error.WriteLine("Inconsistent directory segment count in segment {0:D0} (is {1:D0}, expected {2:D0}{3})", s, n, sc, (sc == 31) ? null : " <= n <= 31");
+                    if (Program.Debug > 1) Console.Error.WriteLine("Inconsistent directory segment count in segment {0:D0} (is {1:D0}, expected {2:D0}{3})", s, n, sc, (sc == 31) ? null : " <= n <= 31");
                     return 1;
                 }
                 n = seg.ToUInt16(4); // highest segment in use
                 if ((s == 1) && (n != sc))
                 {
-                    if (Program.Verbose > 1) Console.Error.WriteLine("Incorrect highest-segment-used pointer in segment {0:D0} (is {1:D0}, expected {2:D0})", s, n, sc);
+                    if (Program.Debug > 1) Console.Error.WriteLine("Incorrect highest-segment-used pointer in segment {0:D0} (is {1:D0}, expected {2:D0})", s, n, sc);
                     return 1;
                 }
                 n = seg.ToUInt16(6); // extra bytes per directory entry
                 if ((eb == -1) && ((n % 2) == 0)) eb = n;
                 else if (n != eb)
                 {
-                    if (Program.Verbose > 1) Console.Error.WriteLine("Inconsistent or invalid extra bytes value in segment {0:D0} (is {1:D0}, expected {2})", s, n, (eb == -1) ? "even number" : eb.ToString("D0"));
+                    if (Program.Debug > 1) Console.Error.WriteLine("Inconsistent or invalid extra bytes value in segment {0:D0} (is {1:D0}, expected {2})", s, n, (eb == -1) ? "even number" : eb.ToString("D0"));
                     return 1;
                 }
                 n = seg.ToUInt16(8); // starting data block for this segment
                 if ((n < ds + ns * 2) || ((n >= disk.BlockCount) && (disk.BlockCount > ds + ns * 2)))
                 {
-                    if (Program.Verbose > 1) Console.Error.WriteLine("Invalid start-of-data pointer in segment {0:D0} (is {1:D0}, expected {2:D0} <= n < {3:D0})", s, n, ds + ns * 2, disk.BlockCount);
+                    if (Program.Debug > 1) Console.Error.WriteLine("Invalid start-of-data pointer in segment {0:D0} (is {1:D0}, expected {2:D0} <= n < {3:D0})", s, n, ds + ns * 2, disk.BlockCount);
                     return 1;
                 }
                 if (n <= bp)
                 {
-                    if (Program.Verbose > 1) Console.Error.WriteLine("Inconsistent start-of-data pointer in segment {0:D0} (is {1:D0}, expected n > {2:D0})", s, n, bp);
+                    if (Program.Debug > 1) Console.Error.WriteLine("Inconsistent start-of-data pointer in segment {0:D0} (is {1:D0}, expected n > {2:D0})", s, n, bp);
                     return 1;
                 }
                 bp = n;
@@ -179,7 +179,7 @@ namespace FSX
                 {
                     if (sp + 14 + eb > 1022)
                     {
-                        if (Program.Verbose > 1) Console.Error.WriteLine("Missing end-of-segment marker in segment {0:D0}", s);
+                        if (Program.Debug > 1) Console.Error.WriteLine("Missing end-of-segment marker in segment {0:D0}", s);
                         return 1;
                     }
                     sp = sp + 14 + eb;
@@ -196,7 +196,7 @@ namespace FSX
                 Int32 n = seg.ToUInt16(8); // starting data block for this segment
                 if ((n != bp) && (s != 1))
                 {
-                    if (Program.Verbose > 1) Console.Error.WriteLine("Inconsistent start-of-data pointer in segment {0:D0} (is {1:D0}, expected {2:D0})", s, n, bp);
+                    if (Program.Debug > 1) Console.Error.WriteLine("Inconsistent start-of-data pointer in segment {0:D0} (is {1:D0}, expected {2:D0})", s, n, bp);
                     return 2;
                 }
                 bp = n;
@@ -209,21 +209,21 @@ namespace FSX
                     w = seg.ToUInt16(sp + 2); // Radix-50 file name (chars 1-3)
                     if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY))
                     {
-                        if (Program.Verbose > 1) Console.Error.WriteLine("Invalid file name in segment {0:D0}", s);
+                        if (Program.Debug > 1) Console.Error.WriteLine("Invalid file name in segment {0:D0}", s);
                         return 2;
                     }
                     String fn1 = Radix50.Convert(w);
                     w = seg.ToUInt16(sp + 4); // Radix-50 file name (chars 4-6)
                     if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY))
                     {
-                        if (Program.Verbose > 1) Console.Error.WriteLine("Invalid file name in segment {0:D0}", s);
+                        if (Program.Debug > 1) Console.Error.WriteLine("Invalid file name in segment {0:D0}", s);
                         return 2;
                     }
                     String fn2 = Radix50.Convert(w);
                     w = seg.ToUInt16(sp + 6); // Radix-50 file type
                     if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY))
                     {
-                        if (Program.Verbose > 1) Console.Error.WriteLine("Invalid file name in segment {0:D0}", s);
+                        if (Program.Debug > 1) Console.Error.WriteLine("Invalid file name in segment {0:D0}", s);
                         return 2;
                     }
                     String ext = Radix50.Convert(w);
@@ -231,18 +231,18 @@ namespace FSX
                     E e = esw & (E.TENT | E.MPTY | E.PERM);
                     if ((e != E.TENT) && (e != E.MPTY) && (e != E.PERM))
                     {
-                        if (Program.Verbose > 1) Console.Error.WriteLine("Invalid file type in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
+                        if (Program.Debug > 1) Console.Error.WriteLine("Invalid file type in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
                         return 2;
                     }
                     if (((esw & (E.PROT | E.READ)) != 0) && (e != E.PERM))
                     {
-                        if (Program.Verbose > 1) Console.Error.WriteLine("Protected/ReadOnly flags not valid for non-permanent file in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
+                        if (Program.Debug > 1) Console.Error.WriteLine("Protected/ReadOnly flags not valid for non-permanent file in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
                         return 2;
                     }
                     n = seg.ToUInt16(sp + 8); // file length (in blocks)
                     if (((bp += n) > disk.BlockCount) && !(lastfile && (esw & E.MPTY) == E.MPTY))
                     {
-                        if (Program.Verbose > 1) Console.Error.WriteLine("File allocation exceeds disk size in segment {0:D0}, file {1}", s, fn);
+                        if (Program.Debug > 1) Console.Error.WriteLine("File allocation exceeds disk size in segment {0:D0}, file {1}", s, fn);
                         return 2;
                     }
                     n = seg.ToUInt16(sp + 12); // creation date
@@ -254,7 +254,7 @@ namespace FSX
                         y = 1972 + 32 * y + (n & 0x001f);
                         if (((m > 12) || (d > 31)) && !(lastfile && (esw & E.MPTY) == E.MPTY))
                         {
-                            if (Program.Verbose > 1) Console.Error.WriteLine("Invalid file creation date in segment {0:D0}, file {1} ({2:D4}-{3:D2}-{4:D2})", s, fn, y, m, d);
+                            if (Program.Debug > 1) Console.Error.WriteLine("Invalid file creation date in segment {0:D0}, file {1} ({2:D4}-{3:D2}-{4:D2})", s, fn, y, m, d);
                             return 1;
                         }
                     }
@@ -292,7 +292,7 @@ namespace FSX
                     {
                         if (BU[bp + i])
                         {
-                            if (Program.Verbose > 1)
+                            if (Program.Debug > 1)
                             {
                                 if (lastfile && (esw & E.MPTY) == E.MPTY) Console.Error.WriteLine("Remaining unused space contains already-allocated block {1:D0}", bp + i);
                                 else Console.Error.WriteLine("File allocation contains already-allocated block in file {0}, block {1:D0}=[{2:D0}]", fn, i + 1, bp + i);
@@ -314,7 +314,7 @@ namespace FSX
             Int32 sum = 0;
             for (Int32 p = 0; p < 510; p += 2) sum += block.ToUInt16(p);
             Int32 n = block.ToUInt16(510);
-            if (Program.Verbose > 2) Console.Error.WriteLine("Home block checksum {0}: {1:x4} {2}= {3:x4}", ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
+            if (Program.Debug > 2) Console.Error.WriteLine("Home block checksum {0}: {1:x4} {2}= {3:x4}", ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
             return ((sum != 0) && ((sum % 65536) == n));
         }
 
@@ -344,7 +344,7 @@ namespace FSX
             np = np.Replace("%", "[^ ]").Replace("*", @".*");
             ep = ep.Replace("%", "[^ ]").Replace("*", @".*");
             p = String.Concat("^", np, @" *\.", ep, " *$");
-            if (Program.Verbose > 2) Console.Error.WriteLine("Regex: {0} => {1}", pattern, p);
+            if (Program.Debug > 2) Console.Error.WriteLine("Regex: {0} => {1}", pattern, p);
             return new Regex(p);
         }
     }
@@ -584,7 +584,7 @@ namespace FSX
 
         public override void DumpFile(String fileSpec, TextWriter output)
         {
-            Program.Dump(null, ReadFile(fileSpec), output, Program.DumpOptions.Radix50);
+            Program.Dump(null, ReadFile(fileSpec), output, 16, 512, Program.DumpOptions.ASCII|Program.DumpOptions.Radix50);
         }
 
         public override String FullName(String fileSpec)

@@ -108,14 +108,14 @@ namespace FSX
             // level 0 - check basic disk parameters
             if (disk.BlockSize != 512)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Disk block size = {0:D0} (must be 512)", disk.BlockSize);
+                if (Program.Debug > 1) Console.Error.WriteLine("Disk block size = {0:D0} (must be 512)", disk.BlockSize);
                 return -1;
             }
 
             // ensure disk is at least large enough to contain home block
             if (disk.BlockCount < 2)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Disk too small to contain home block");
+                if (Program.Debug > 1) Console.Error.WriteLine("Disk too small to contain home block");
                 return -1;
             }
             if (level == 0) return 0;
@@ -124,43 +124,43 @@ namespace FSX
             Block HB = disk[1];
             if (!HomeBlockChecksumOK(HB, 58))
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Home Block First Checksum invalid");
+                if (Program.Debug > 1) Console.Error.WriteLine("Home Block First Checksum invalid");
                 return 0;
             }
             if (!HomeBlockChecksumOK(HB, 510))
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Home Block Second Checksum invalid");
+                if (Program.Debug > 1) Console.Error.WriteLine("Home Block Second Checksum invalid");
                 return 0;
             }
             if (HB.ToUInt16(0) == 0)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Home Block Index File Bitmap Size invalid (must not be 0)");
+                if (Program.Debug > 1) Console.Error.WriteLine("Home Block Index File Bitmap Size invalid (must not be 0)");
                 return 0;
             }
             if ((HB.ToUInt16(2) == 0) && (HB.ToUInt16(4) == 0))
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Home Block Index File Bitmap LBN invalid (must not be 0)");
+                if (Program.Debug > 1) Console.Error.WriteLine("Home Block Index File Bitmap LBN invalid (must not be 0)");
                 return 0;
             }
             if (HB.ToUInt16(6) == 0)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Home Block Maximum Number of Files invalid (must not be 0)");
+                if (Program.Debug > 1) Console.Error.WriteLine("Home Block Maximum Number of Files invalid (must not be 0)");
                 return 0;
             }
             if (HB.ToUInt16(8) != 1)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Home Block Storage Bitmap Cluster Factor invalid (must be 1)");
+                if (Program.Debug > 1) Console.Error.WriteLine("Home Block Storage Bitmap Cluster Factor invalid (must be 1)");
                 return 0;
             }
             if (HB.ToUInt16(10) != 0)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Home Block Disk Device Type invalid (must be 0)");
+                if (Program.Debug > 1) Console.Error.WriteLine("Home Block Disk Device Type invalid (must be 0)");
                 return 0;
             }
             Int32 n = HB.ToUInt16(12);
             if ((n != 0x0101) && (n != 0x0102))
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Home Block Volume Structure Level invalid (must be 0x0101 or 0x0102)");
+                if (Program.Debug > 1) Console.Error.WriteLine("Home Block Volume Structure Level invalid (must be 0x0101 or 0x0102)");
                 return 0;
             }
             return 1;
@@ -171,7 +171,7 @@ namespace FSX
             Int32 sum = 0;
             for (Int32 p = 0; p < checksumOffset; p += 2) sum += block.ToUInt16(p);
             Int32 n = block.ToUInt16(checksumOffset);
-            if (Program.Verbose > 2) Console.Error.WriteLine("Home block checksum @{0:D0} {1}: {2:x4} {3}= {4:x4}", checksumOffset, ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
+            if (Program.Debug > 2) Console.Error.WriteLine("Home block checksum @{0:D0} {1}: {2:x4} {3}= {4:x4}", checksumOffset, ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
             return ((sum != 0) && ((sum % 65536) == n));
         }
 
@@ -209,7 +209,7 @@ namespace FSX
             ep = ep.Replace("?", "[^ ]").Replace("*", @".*");
             vp = vp.Replace("*", @".*");
             p = String.Concat("^", np, @" *\.", ep, " *;", vp, "$");
-            if (Program.Verbose > 2) Console.Error.WriteLine("Regex: {0} => {1}", pattern, p);
+            if (Program.Debug > 2) Console.Error.WriteLine("Regex: {0} => {1}", pattern, p);
             return new Regex(p);
         }
     }
@@ -366,7 +366,7 @@ namespace FSX
             }
 
             Byte[] data = ReadFile(dirNum, dirSeq, 0);
-            Program.Dump(null, data, output, Program.DumpOptions.Radix50);
+            Program.Dump(null, data, output, 16, 512, Program.DumpOptions.ASCII|Program.DumpOptions.Radix50);
         }
 
         public override void ListFile(String fileSpec, Encoding encoding, TextWriter output)
@@ -386,7 +386,7 @@ namespace FSX
 
         public override void DumpFile(String fileSpec, TextWriter output)
         {
-            Program.Dump(null, ReadFile(fileSpec), output, Program.DumpOptions.Radix50);
+            Program.Dump(null, ReadFile(fileSpec), output, 16, 512, Program.DumpOptions.ASCII|Program.DumpOptions.Radix50);
         }
 
         public override String FullName(String fileSpec)

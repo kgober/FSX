@@ -59,6 +59,7 @@ namespace FSX
         static public TextWriter Out = Console.Out;
         static public VDE Vol;
         static public Int32 Verbose = 0;
+        static public Int32 Debug = 0;
 
         static private Dictionary<String, VDE> VolMap = new Dictionary<String, VDE>(StringComparer.OrdinalIgnoreCase);
 
@@ -90,6 +91,10 @@ namespace FSX
                 else if ((cmd == "verb") || (cmd == "verbose"))
                 {
                     Int32.TryParse(arg, out Verbose);
+                }
+                else if ((cmd == "deb") || (cmd == "debug"))
+                {
+                    Int32.TryParse(arg, out Debug);
                 }
                 else if ((cmd == "vols") || (cmd == "volumes"))
                 {
@@ -615,10 +620,10 @@ namespace FSX
 
         static FileSystem TryDEC(Disk disk)
         {
-            if (Program.Verbose > 1) Console.Error.WriteLine("TryDEC: {0}", disk.Source);
+            if (Program.Debug > 1) Console.Error.WriteLine("TryDEC: {0}", disk.Source);
 
             // check basic disk parameters
-            if ((disk is CHSDisk) && (disk.BlockSize != 512) && ((512 % disk.BlockSize) == 0))
+            if ((disk is CHSDisk) && (disk.BlockSize != 512) && ((512 % disk.BlockSize) == 0) && (disk.MinCylinder == 0) && (disk.MinSector() == 1))
             {
                 if ((disk.BlockSize == 128) && (disk.MaxSector(0, 0) == 26) && (disk.BlockCount == 1976))
                 {
@@ -684,7 +689,7 @@ namespace FSX
             }
             else if (disk.BlockSize != 512)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Volume block size = {0:D0} (must be 512)", disk.BlockSize);
+                if (Program.Debug > 1) Console.Error.WriteLine("Volume block size = {0:D0} (must be 512)", disk.BlockSize);
                 return null;
             }
 
@@ -718,11 +723,12 @@ namespace FSX
             Out.WriteLine("  id: - change current volume to 'id:'");
             Out.WriteLine("  cd [id:]dir - change current directory");
             Out.WriteLine("  dir|ls [id:]pattern - show directory");
-            Out.WriteLine("  dumpdir [id:]pattern - show directory with more detail");
+            Out.WriteLine("  dumpdir [id:]pattern - show raw directory data");
             Out.WriteLine("  type|cat [id:]file - show file as text");
             Out.WriteLine("  dump|od [id:]file - show file as a hex dump");
             Out.WriteLine("  save|write [id:]file pathname - export image of file 'file' to file 'pathname'");
             Out.WriteLine("  verb|verbose n - set verbosity level (default 0)");
+            Out.WriteLine("  deb|debug n - set debug level (default 0)");
             Out.WriteLine("  help - show this text");
             Out.WriteLine("  exit|quit - exit program");
             Out.WriteLine();
@@ -852,48 +858,63 @@ namespace FSX
         [Flags]
         public enum DumpOptions : uint
         {
-            Default = 0,
+            Default = 1,
             None = 0,
-            NoASCII = 1,
-            Radix50 = 2,
-            EBCDIC = 4,
-            PETSCII0 = 8,
-            PETSCII1 = 16,
+            ASCII = 1,
+            DOS = 2,
+            ANSI = 4,
+            EBCDIC = 8,
+            Radix50 = 16,
+            PETSCII0 = 32,
+            PETSCII1 = 64,
         }
 
-        static public void Dump(String prefix, Byte[] data, TextWriter output, DumpOptions options)
+        static public void Dump(String prefix, Byte[] data, TextWriter output)
         {
-            for (Int32 i = 0; i < data.Length; i += 16)
+            Dump(prefix, data, output, 16, 0, DumpOptions.Default);
+        }
+
+        static public void Dump(String prefix, Byte[] data, TextWriter output, Int32 bytesPerLine, Int32 bytesPerSection)
+        {
+            Dump(prefix, data, output, bytesPerLine, bytesPerSection, DumpOptions.Default);
+        }
+
+        static public void Dump(String prefix, Byte[] data, TextWriter output, Int32 bytesPerLine, Int32 bytesPerSection, DumpOptions options)
+        {
+            Int32 bPHL = ((bytesPerLine % 2) == 0) ? bytesPerLine / 2 : -1; // bytesPerHalfLine
+            Char HL = (bPHL == -1) ? ' ' : ':'; // Half Line marker
+            Int32 bPQL = ((bPHL % 2) == 0) ? bPHL / 2 : -1; // bytesPerQuarterLine
+            Char QL = (bPQL == -1) ? ' ' : '.'; // Quarter Line marker
+            String fmt = String.Format("{0:x0}", data.Length - 1);
+            fmt = String.Concat("{0}{1:X", fmt.Length.ToString("D0"), "} ");
+            Int32 n = bytesPerSection;
+            for (Int32 i = 0; i < data.Length; )
             {
-                output.Write("{0}{1:X4} ", prefix, i);
-                for (Int32 j = 0; j < 16; j++) output.Write(" {0}", (i + j < data.Length) ? data[i + j].ToString("x2") : "  ");
-                if ((options & DumpOptions.NoASCII) != DumpOptions.NoASCII)
+                Int32 l = (n < bytesPerLine) ? n : bytesPerLine;
+                output.Write(fmt, prefix, i);
+                for (Int32 j = 0; j < bytesPerLine; j++) output.Write("{0}{1}", (j == bPHL) ? HL : ((j % bPHL) == bPQL) ? QL : ' ', ((i + j < data.Length) && (j < l)) ? data[i + j].ToString("x2") : "  ");
+                if ((options & DumpOptions.ASCII) == DumpOptions.ASCII)
                 {
                     output.Write("  ");
-                    for (Int32 j = 0; j < 16; j++) output.Write((i + j < data.Length) ? (((data[i + j] >= 32) && (data[i + j] < 127)) ? (Char)(data[i + j]) : '.') : ' ');
-                }
-                if ((options & DumpOptions.Radix50) == DumpOptions.Radix50)
-                {
-                    output.Write("  ");
-                    for (Int32 j = 0; j < 16; j += 2)
-                    {
-                        String s = "   ";
-                        if (i + j + 1 < data.Length)
-                        {
-                            UInt16 n = BitConverter.ToUInt16(data, i + j);
-                            if (n < 64000U) s = Radix50.Convert(n);
-                        }
-                        output.Write(s);
-                    }
-                }
-                if ((options & DumpOptions.EBCDIC) == DumpOptions.EBCDIC)
-                {
-                    Encoding E = Encoding.GetEncoding("IBM037", EncoderFallback.ReplacementFallback, DecoderFallback.ReplacementFallback);
-                    output.Write("  ");
-                    for (Int32 j = 0; j < 16; j++)
+                    for (Int32 j = 0; j < bytesPerLine; j++)
                     {
                         Char c = ' ';
-                        if (i + j < data.Length)
+                        if ((i + j < data.Length) && (j < l))
+                        {
+                            Byte b = data[i + j];
+                            c = ((b >= 32) && (b < 127)) ? (char)b : '.';
+                        }
+                        output.Write(c);
+                    }
+                }
+                if ((options & DumpOptions.DOS) == DumpOptions.DOS)
+                {
+                    Encoding E = Encoding.GetEncoding(437, EncoderFallback.ReplacementFallback, DecoderFallback.ReplacementFallback);
+                    output.Write("  ");
+                    for (Int32 j = 0; j < bytesPerLine; j++)
+                    {
+                        Char c = ' ';
+                        if ((i + j < data.Length) && (j < l))
                         {
                             Char[] C = E.GetChars(data, i + j, 1);
                             if (C.Length != 0) c = C[0];
@@ -902,14 +923,60 @@ namespace FSX
                         output.Write(c);
                     }
                 }
+                if ((options & DumpOptions.ANSI) == DumpOptions.ANSI)
+                {
+                    Encoding E = Encoding.GetEncoding(1252, EncoderFallback.ReplacementFallback, DecoderFallback.ReplacementFallback);
+                    output.Write("  ");
+                    for (Int32 j = 0; j < bytesPerLine; j++)
+                    {
+                        Char c = ' ';
+                        if ((i + j < data.Length) && (j < l))
+                        {
+                            Char[] C = E.GetChars(data, i + j, 1);
+                            if (C.Length != 0) c = C[0];
+                            if (!Char.IsLetterOrDigit(c) && !Char.IsSymbol(c) && !Char.IsPunctuation(c) && (c != ' ')) c = '.';
+                        }
+                        output.Write(c);
+                    }
+                }
+                if ((options & DumpOptions.EBCDIC) == DumpOptions.EBCDIC)
+                {
+                    Encoding E = Encoding.GetEncoding(37, EncoderFallback.ReplacementFallback, DecoderFallback.ReplacementFallback);
+                    output.Write("  ");
+                    for (Int32 j = 0; j < bytesPerLine; j++)
+                    {
+                        Char c = ' ';
+                        if ((i + j < data.Length) && (j < l))
+                        {
+                            Char[] C = E.GetChars(data, i + j, 1);
+                            if (C.Length != 0) c = C[0];
+                            if (!Char.IsLetterOrDigit(c) && !Char.IsSymbol(c) && !Char.IsPunctuation(c) && (c != ' ')) c = '.';
+                        }
+                        output.Write(c);
+                    }
+                }
+                if ((options & DumpOptions.Radix50) == DumpOptions.Radix50)
+                {
+                    output.Write("  ");
+                    for (Int32 j = 0; j < bytesPerLine; j += 2)
+                    {
+                        String s = "   ";
+                        if ((i + j + 1 < data.Length) && (j + 1 < l))
+                        {
+                            UInt16 w = BitConverter.ToUInt16(data, i + j);
+                            if (w < 64000U) s = Radix50.Convert(w);
+                        }
+                        output.Write(s);
+                    }
+                }
                 if ((options & DumpOptions.PETSCII0) == DumpOptions.PETSCII0)
                 {
                     Encoding E = PETSCII0.Encoding;
                     output.Write("  ");
-                    for (Int32 j = 0; j < 16; j++)
+                    for (Int32 j = 0; j < bytesPerLine; j++)
                     {
                         Char c = ' ';
-                        if (i + j < data.Length)
+                        if ((i + j < data.Length) && (j < l))
                         {
                             Char[] C = E.GetChars(data, i + j, 1);
                             if (C.Length != 0) c = C[0];
@@ -922,10 +989,10 @@ namespace FSX
                 {
                     Encoding E = PETSCII1.Encoding;
                     output.Write("  ");
-                    for (Int32 j = 0; j < 16; j++)
+                    for (Int32 j = 0; j < bytesPerLine; j++)
                     {
                         Char c = ' ';
-                        if (i + j < data.Length)
+                        if ((i + j < data.Length) && (j < l))
                         {
                             Char[] C = E.GetChars(data, i + j, 1);
                             if (C.Length != 0) c = C[0];
@@ -935,6 +1002,13 @@ namespace FSX
                     }
                 }
                 output.WriteLine();
+                i += l;
+                n -= l;
+                if (n == 0)
+                {
+                    output.WriteLine();
+                    n = bytesPerSection;
+                }
             }
         }
     }

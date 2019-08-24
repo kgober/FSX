@@ -44,7 +44,7 @@ namespace FSX
     {
         public static Unix Try(Disk disk)
         {
-            if (Program.Verbose > 1) Console.Error.WriteLine("Unix.Try: {0}", disk.Source);
+            if (Program.Debug > 1) Console.Error.WriteLine("Unix.Try: {0}", disk.Source);
 
             if ((disk.BlockSize != 512) && ((512 % disk.BlockSize) == 0))
             {
@@ -52,7 +52,7 @@ namespace FSX
             }
             else if (disk.BlockSize != 512)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Volume block size = {0:D0} (must be 512)", disk.BlockSize);
+                if (Program.Debug > 1) Console.Error.WriteLine("Volume block size = {0:D0} (must be 512)", disk.BlockSize);
                 return null;
             }
 
@@ -72,14 +72,14 @@ namespace FSX
             // level 0 - check basic disk parameters
             if (disk.BlockSize != 512)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Disk block size = {0:D0} (must be 512)", disk.BlockSize);
+                if (Program.Debug > 1) Console.Error.WriteLine("Disk block size = {0:D0} (must be 512)", disk.BlockSize);
                 return -1;
             }
 
             // ensure disk is at least large enough to contain root directory inode
             if (disk.BlockCount < 3)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("Disk too small to contain root directory inode");
+                if (Program.Debug > 1) Console.Error.WriteLine("Disk too small to contain root directory inode");
                 return -1;
             }
             if (level == 0) return 0;
@@ -90,7 +90,7 @@ namespace FSX
             Int32 fsize = B.ToUInt16(2); // file system size (in blocks)
             if (fsize < isize + 2)
             {
-                if (Program.Verbose > 1) Console.Error.WriteLine("I-list size in super-block exceeds volume size ({0:D0} > {1:D0})", isize + 2, fsize);
+                if (Program.Debug > 1) Console.Error.WriteLine("I-list size in super-block exceeds volume size ({0:D0} > {1:D0})", isize + 2, fsize);
                 return 0;
             }
             return fsize;
@@ -110,7 +110,7 @@ namespace FSX
             String p = pattern;
             p = p.Replace("?", ".").Replace("*", @".*");
             p = String.Concat("^", p, "$");
-            if (Program.Verbose > 2) Console.Error.WriteLine("Regex: {0} => {1}", pattern, p);
+            if (Program.Debug > 2) Console.Error.WriteLine("Regex: {0} => {1}", pattern, p);
             return new Regex(p);
         }
     }
@@ -289,7 +289,7 @@ namespace FSX
         {
             Inode iNode = FindFile(iDir, fileSpec);
             if (iNode.inum == 0) return;
-            Program.Dump(null, ReadFile(iNode), output, Program.DumpOptions.Default);
+            Program.Dump(null, ReadFile(iNode), output, 16, 512, Program.DumpOptions.ASCII);
         }
 
         public override String FullName(String fileSpec)

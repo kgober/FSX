@@ -185,7 +185,7 @@ namespace FSX
         {
             String fn = (fileSpec.StartsWith(@"\")) ? fileSpec : String.Concat(mCWD.FullName, @"\", fileSpec);
             if (!IsValidFile(fn)) return;
-            Program.Dump(null, File.ReadAllBytes(fn), output, Program.DumpOptions.Radix50 | Program.DumpOptions.EBCDIC);
+            Program.Dump(null, File.ReadAllBytes(fn), output, 16, 512, Program.DumpOptions.DOS | Program.DumpOptions.ANSI);
         }
 
         public override String FullName(String fileSpec)

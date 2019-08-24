@@ -184,6 +184,34 @@ namespace FSX
             }
             return true;
         }
+
+        // convert an ODS-1 wildcard pattern to a Regex
+        private static Regex Regex(String pattern)
+        {
+            String p = pattern.ToUpperInvariant();
+            String vp = "*";
+            Int32 i = p.IndexOf(';');
+            if (i != -1)
+            {
+                vp = p.Substring(i + 1);
+                p = p.Substring(0, i);
+            }
+            String np = p;
+            String ep = "*";
+            i = p.IndexOf('.');
+            if (i != -1)
+            {
+                np = p.Substring(0, i);
+                if (np.Length == 0) np = "*";
+                ep = p.Substring(i + 1);
+            }
+            np = np.Replace("?", "[^ ]").Replace("*", @".*");
+            ep = ep.Replace("?", "[^ ]").Replace("*", @".*");
+            vp = vp.Replace("*", @".*");
+            p = String.Concat("^", np, @" *\.", ep, " *;", vp, "$");
+            if (Program.Verbose > 2) Console.Error.WriteLine("Regex: {0} => {1}", pattern, p);
+            return new Regex(p);
+        }
     }
 
     partial class ODS1 : FileSystem
@@ -246,51 +274,65 @@ namespace FSX
                 dirSpec = String.Format("{0:D3}{1:D3}", m, n);
             }
 
-            Byte[] data = ReadFile(4, 4, 0);
-            Int32 bp = 0;
-            while (bp < data.Length)
+            String fn;
+            UInt16 fnum, fseq;
+            if (!FindFile(4, 4, String.Concat(dirSpec, ".DIR;*"), out fnum, out fseq, out fn)) return;
+
+            Boolean f = false;
+            if (fn.Length == 6)
             {
-                UInt16 fnum = BitConverter.ToUInt16(data, bp);
-                if ((fnum != 0) && (BitConverter.ToUInt16(data, bp + 12) == 0x1a7a)) // 0x1a7a = "DIR" in Radix-50
-                {
-                    String fn1 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 6));
-                    String fn2 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 8));
-                    String fn3 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 10));
-                    String fn = String.Concat(fn1, fn2, fn3).Trim();
-                    if (String.Compare(dirSpec, fn, StringComparison.OrdinalIgnoreCase) == 0)
-                    {
-                        Boolean f = false;
-                        if (fn.Length == 6)
-                        {
-                            for (Int32 i = 0; i < 6; i++) if (!Char.IsDigit(fn, i)) f = true;
-                        }
-                        mDir = (f) ? String.Concat("[", fn, "]") : String.Format("[{0:D0},{1:D0}]", Byte.Parse(fn.Substring(0, 3)), Byte.Parse(fn.Substring(3, 3)));
-                        mDirNum = fnum;
-                        mDirSeq = BitConverter.ToUInt16(data, bp + 2);
-                        return;
-                    }
-                }
-                bp += 16;
+                for (Int32 i = 0; i < 6; i++) if (!Char.IsDigit(fn, i)) f = true;
             }
+            mDir = (f) ? String.Concat("[", fn, "]") : String.Format("[{0:D0},{1:D0}]", Byte.Parse(fn.Substring(0, 3)), Byte.Parse(fn.Substring(3, 3)));
+            mDirNum = fnum;
+            mDirSeq = fseq;
         }
 
         public override void ListDir(String fileSpec, TextWriter output)
         {
-            Byte[] data = ReadFile(mDirNum, mDirSeq, 0);
+            if ((fileSpec == null) || (fileSpec.Length == 0)) fileSpec = "*.*;*";
+
+            String dirSpec = mDir;
+            UInt16 dirNum = mDirNum;
+            UInt16 dirSeq = mDirSeq;
+            Int32 p = fileSpec.IndexOf(']');
+            if (p != -1)
+            {
+                dirSpec = fileSpec.Substring(0, p);
+                fileSpec = fileSpec.Substring(p + 1);
+                p = dirSpec.IndexOf('[');
+                if (p == -1) return;
+                dirSpec = dirSpec.Substring(p + 1);
+                p = dirSpec.IndexOf(',');
+                if (p != -1)
+                {
+                    Byte m, n;
+                    if (!Byte.TryParse(dirSpec.Substring(0, p), out m) || !Byte.TryParse(dirSpec.Substring(p + 1), out n)) return;
+                    dirSpec = String.Format("{0:D3}{1:D3}", m, n);
+                }
+                if (!FindFile(4, 4, String.Concat(dirSpec, ".DIR;*"), out dirNum, out dirSeq, out dirSpec)) return;
+            }
+
+            Regex RE = Regex(fileSpec);
+            Byte[] data = ReadFile(dirNum, dirSeq, 0);
             Int32 bp = 0;
             while (bp < data.Length)
             {
                 UInt16 fnum = BitConverter.ToUInt16(data, bp);
                 if (fnum != 0)
                 {
-                    UInt16 fseq = BitConverter.ToUInt16(data, bp + 2);
-                    UInt16 fvol = BitConverter.ToUInt16(data, bp + 4);
                     String fn1 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 6));
                     String fn2 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 8));
                     String fn3 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 10));
                     String ext = Radix50.Convert(BitConverter.ToUInt16(data, bp + 12));
                     UInt16 ver = BitConverter.ToUInt16(data, bp + 14);
-                    output.WriteLine("{0}{1}{2}.{3};{4:D0} ({5:D0},{6:D0},{7:D0})", fn1, fn2, fn3, ext, ver, fnum, fseq, fvol);
+                    String fn = String.Format("{0}{1}{2}.{3};{4:D0}", fn1, fn2, fn3, ext, ver);
+                    if (RE.IsMatch(fn))
+                    {
+                        UInt16 fseq = BitConverter.ToUInt16(data, bp + 2);
+                        UInt16 fvol = BitConverter.ToUInt16(data, bp + 4);
+                        output.WriteLine("{0} ({1:D0},{2:D0},{3:D0})", fn, fnum, fseq, fvol);
+                    }
                 }
                 bp += 16;
             }
@@ -437,6 +479,45 @@ namespace FSX
         public override Boolean SaveFS(String fileName, String format)
         {
             throw new NotImplementedException();
+        }
+
+        private Boolean FindFile(UInt16 dirNum, UInt16 dirSeq, String fileSpec, out UInt16 fileNum, out UInt16 fileSeq, out String fileName)
+        {
+            if ((fileSpec == null) || (fileSpec.Length == 0))
+            {
+                fileNum = 0;
+                fileSeq = 0;
+                fileName = null;
+                return false;
+            }
+            Regex RE = Regex(fileSpec);
+            Byte[] data = ReadFile(dirNum, dirSeq, 0);
+            Int32 bp = 0;
+            while (bp < data.Length)
+            {
+                UInt16 fnum = BitConverter.ToUInt16(data, bp);
+                if (fnum != 0)
+                {
+                    String fn1 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 6));
+                    String fn2 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 8));
+                    String fn3 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 10));
+                    String ext = Radix50.Convert(BitConverter.ToUInt16(data, bp + 12));
+                    UInt16 ver = BitConverter.ToUInt16(data, bp + 14);
+                    String fn = String.Format("{0}{1}{2}.{3};{4:D0}", fn1, fn2, fn3, ext, ver);
+                    if (RE.IsMatch(fn))
+                    {
+                        fileNum = fnum;
+                        fileSeq = BitConverter.ToUInt16(data, bp + 2);
+                        fileName = fn;
+                        return true;
+                    }
+                }
+                bp += 16;
+            }
+            fileNum = 0;
+            fileSeq = 0;
+            fileName = null;
+            return false;
         }
 
         private Block GetFileBlock(UInt16 fileNum, UInt16 seqNum, Int32 vbn)

@@ -300,6 +300,7 @@ namespace FSX
             {
                 dirSpec = fileSpec.Substring(0, p);
                 fileSpec = fileSpec.Substring(p + 1);
+                if (fileSpec.Length == 0) fileSpec = "*.*;*";
                 p = dirSpec.IndexOf('[');
                 if (p == -1) return;
                 dirSpec = dirSpec.Substring(p + 1);
@@ -340,18 +341,52 @@ namespace FSX
 
         public override void DumpDir(String fileSpec, TextWriter output)
         {
-            Byte[] data = ReadFile(mDirNum, mDirSeq, 0);
+            if ((fileSpec == null) || (fileSpec.Length == 0)) fileSpec = "*.*;*";
+
+            String dirSpec = mDir;
+            UInt16 dirNum = mDirNum;
+            UInt16 dirSeq = mDirSeq;
+            Int32 p = fileSpec.IndexOf(']');
+            if (p != -1)
+            {
+                dirSpec = fileSpec.Substring(0, p);
+                fileSpec = fileSpec.Substring(p + 1);
+                if (fileSpec.Length == 0) fileSpec = "*.*;*";
+                p = dirSpec.IndexOf('[');
+                if (p == -1) return;
+                dirSpec = dirSpec.Substring(p + 1);
+                p = dirSpec.IndexOf(',');
+                if (p != -1)
+                {
+                    Byte m, n;
+                    if (!Byte.TryParse(dirSpec.Substring(0, p), out m) || !Byte.TryParse(dirSpec.Substring(p + 1), out n)) return;
+                    dirSpec = String.Format("{0:D3}{1:D3}", m, n);
+                }
+                if (!FindFile(4, 4, String.Concat(dirSpec, ".DIR;*"), out dirNum, out dirSeq, out dirSpec)) return;
+            }
+
+            Byte[] data = ReadFile(dirNum, dirSeq, 0);
             Program.Dump(null, data, output, Program.DumpOptions.Radix50);
         }
 
         public override void ListFile(String fileSpec, Encoding encoding, TextWriter output)
         {
-            throw new NotImplementedException();
+            Byte[] buf = ReadFile(fileSpec);
+            Int32 p = buf.Length;
+            for (Int32 i = 0; i < buf.Length; i++)
+            {
+                if (buf[i] == 26) // ^Z
+                {
+                    p = i;
+                    break;
+                }
+            }
+            output.Write(encoding.GetString(buf, 0, p));
         }
 
         public override void DumpFile(String fileSpec, TextWriter output)
         {
-            throw new NotImplementedException();
+            Program.Dump(null, ReadFile(fileSpec), output, Program.DumpOptions.Radix50);
         }
 
         public override String FullName(String fileSpec)
@@ -361,7 +396,32 @@ namespace FSX
 
         public override Byte[] ReadFile(String fileSpec)
         {
-            throw new NotImplementedException();
+            if ((fileSpec == null) || (fileSpec.Length == 0)) return new Byte[0];
+
+            String dirSpec = mDir;
+            UInt16 dirNum = mDirNum;
+            UInt16 dirSeq = mDirSeq;
+            Int32 p = fileSpec.IndexOf(']');
+            if (p != -1)
+            {
+                dirSpec = fileSpec.Substring(0, p);
+                fileSpec = fileSpec.Substring(p + 1);
+                if (fileSpec.Length == 0) return new Byte[0];
+                p = dirSpec.IndexOf('[');
+                if (p == -1) return new Byte[0];
+                dirSpec = dirSpec.Substring(p + 1);
+                p = dirSpec.IndexOf(',');
+                if (p != -1)
+                {
+                    Byte m, n;
+                    if (!Byte.TryParse(dirSpec.Substring(0, p), out m) || !Byte.TryParse(dirSpec.Substring(p + 1), out n)) return new Byte[0];
+                    dirSpec = String.Format("{0:D3}{1:D3}", m, n);
+                }
+                if (!FindFile(4, 4, String.Concat(dirSpec, ".DIR;*"), out dirNum, out dirSeq, out dirSpec)) return new Byte[0];
+            }
+
+            if (!FindFile(dirNum, dirSeq, fileSpec, out dirNum, out dirSeq, out fileSpec)) return new Byte[0];
+            return ReadFile(dirNum, dirSeq);
         }
 
         private Byte[] ReadFile(UInt16 fileNum, UInt16 seqNum)

@@ -194,7 +194,7 @@ namespace FSX
                             Program.Debug(1, "BAM format mismatch in {0:D0}/{1:D0} (is {2:D0}, expected {3:D0})", t, s, B[2], ver);
                             return 1;
                         }
-                        if (ver == 67) // start/limit tracks only present in DOS 2.5/2.7
+                        if (ver == 67) // track start/limit only present in DOS 2.5 / 2.7
                         {
                             if (B[4] != bt)
                             {
@@ -246,6 +246,11 @@ namespace FSX
                         }
                     }
                 }
+                if ((B[0] == 0) && (ver == 67) && (bt != disk.MaxCylinder + 1))
+                {
+                    Program.Debug(1, "BAM coverage error in {0:D0}/{1:D0} (limit track is {2:D0}, expected {3:D0})", t, s, bt, disk.MaxCylinder + 1);
+                    return 1;
+                }
                 t = B[0];
                 s = B[1];
             }
@@ -294,15 +299,17 @@ namespace FSX
         private Disk mDisk;
         private String mType;
         private Int32 mDirTrack;
+        private Int32 mBlocksFree;
 
         public CBMDOS(CHSDisk disk)
         {
             mDisk = disk;
             mDirTrack = (disk.MaxCylinder <= 42) ? 18 : 39;
-            Byte v = disk[mDirTrack, 0, 0][2];
-            if (v == 1) mType = "CBMDOS1";
-            else if (v == 65) mType = "CBMDOS2"; // v == 'A'
-            else if (v == 67) mType = (disk.MaxCylinder == 77) ? "CBMDOS2.5" : "CBMDOS2.7"; // v == 'C'
+            Byte ver = disk[mDirTrack, 0, 0][2];
+            if (ver == 1) mType = "CBMDOS1";
+            else if (ver == 65) mType = "CBMDOS2";
+            else if (ver == 67) mType = (disk.MaxCylinder > 77) ? "CBMDOS2.7" : "CBMDOS2.5";
+            mBlocksFree = CountFreeBlocks();
         }
 
         public override Disk Disk
@@ -388,7 +395,7 @@ namespace FSX
                 t = B[0];
                 s = B[1];
             }
-            // TODO: display "{0:D0} blocks free."
+            output.WriteLine("{0:D0} blocks free.", mBlocksFree);
         }
 
         public override void DumpDir(String fileSpec, TextWriter output)
@@ -537,6 +544,30 @@ namespace FSX
                 s = B[1];
             }
             return null;
+        }
+
+        private Int32 CountFreeBlocks()
+        {
+            Block B = mDisk[mDirTrack, 0, 0];
+            if (B[2] != 67) // DOS 1.0 / 2.0
+            {
+                Int32 n = 0;
+                Int32 l = 4 + 35 * 4;
+                for (Int32 i = 4; i < l; i += 4) n += B[i];
+                return n;
+            }
+            else // DOS 2.5 / 2.7
+            {
+                Int32 n = 0;
+                Int32 c = (mDisk.MaxCylinder > 77) ? 4 : 2;
+                for (Int32 j = 0; j < c; j++)
+                {
+                    B = mDisk[B[0], 0, B[1]];
+                    Int32 l = 6 + (B[5] - B[4]) * 5;
+                    for (Int32 i = 6; i < l; i += 5) n += B[i];
+                }
+                return n;
+            }
         }
     }
 }

@@ -346,9 +346,9 @@ namespace FSX
             if ((fileSpec == null) || (fileSpec.Length == 0)) fileSpec = "*";
             Regex RE = Regex(fileSpec);
             Block B = mDisk[mDirTrack, 0, 0];
-            Byte v = B[2];
+            Byte ver = B[2];
             Byte[] buf = new Byte[24];
-            Int32 p = (v == 67) ? 6 : 144;
+            Int32 p = (ver == 67) ? 6 : 144;
             B.CopyTo(buf, 0, p, 24);
             String nm = PETSCII1.Encoding.GetString(buf, 0, 16);
             String id = PETSCII1.Encoding.GetString(buf, 18, 2);
@@ -363,7 +363,7 @@ namespace FSX
                 output.Write("\"{0,-16}\" {1} {2}", nm, id, dv);
                 Console.BackgroundColor = bg;
                 Console.ForegroundColor = fg;
-                output.WriteLine(" ");
+                output.WriteLine();
             }
             else
             {

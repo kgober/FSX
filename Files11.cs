@@ -291,7 +291,7 @@ namespace FSX
             }
             // TODO: check File Ident Area fields (e.g. file name, file type)
             n = 0; // calculated size of storage bitmap file (based on map area retrieval pointers)
-            l = -1;
+            Int32 bLim = -1;
             while (H != null)
             {
                 Int32 map = H[1] * 2; // map area offset
@@ -338,14 +338,15 @@ namespace FSX
                     //    return 2;
                     //}
                     n += ct;
-                    if (l == -1)
+                    if (bLim == -1)
                     {
                         Block B = disk[lbn];
                         l = 4 + B[3] * 4;
-                        l = (B.ToUInt16(l) << 16) + B.ToUInt16(l + 2);
-                        if (((l + 4095) / 4096) != B[3])
+                        bLim = (B.ToUInt16(l) << 16) + B.ToUInt16(l + 2); // size of unit in blocks from Storage Control Block
+                        l = (bLim + 4095) / 4096; // number of storage bitmap blocks needed
+                        if (l != B[3])
                         {
-                            Program.Debug(1, "Storage Bitmap size inconsistent with volume size (bitmap capacity {0:D0}, volume size {1:D0}", B[3] * 4096, l);
+                            Program.Debug(1, "Storage Bitmap size inconsistent with volume size (bitmap capacity {0:D0}, volume size {1:D0}", B[3] * 4096, bLim);
                             return 2;
                         }
                     }
@@ -364,12 +365,12 @@ namespace FSX
                 if (w != 0) HA[w] = 2;
                 H = GetFileHeader(disk, w);
             }
-            if (n != (l + 4095) / 4096 + 1)
+            if (n != l + 1)
             {
-                Program.Debug(1, "Storage Bitmap File block map length invalid (is {0:D0}, expected {1:D0})", n, (l + 4095) / 4096 + 1);
+                Program.Debug(1, "Storage Bitmap File block map length invalid (is {0:D0}, expected {1:D0})", n, l + 1);
                 return 2;
             }
-            return l;
+            return bLim;
 
             // level 4 - check file headers (and return volume size)
             // like checking the index file 1,1, except for filenums >1
@@ -586,7 +587,7 @@ namespace FSX
             }
 
             Regex RE = Regex(fileSpec);
-            Byte[] data = ReadFile(dirNum, dirSeq, 0);
+            Byte[] data = ReadFile(dirNum, dirSeq);
             Int32 bp = 0;
             while (bp < data.Length)
             {
@@ -636,7 +637,7 @@ namespace FSX
                 if (!FindFile(4, 4, String.Concat(dirSpec, ".DIR;*"), out dirNum, out dirSeq, out dirSpec)) return;
             }
 
-            Byte[] data = ReadFile(dirNum, dirSeq, 0);
+            Byte[] data = ReadFile(dirNum, dirSeq);
             Program.Dump(null, data, output, 16, 512, Program.DumpOptions.ASCII|Program.DumpOptions.Radix50);
         }
 
@@ -697,19 +698,13 @@ namespace FSX
 
         private Byte[] ReadFile(UInt16 fileNum, UInt16 seqNum)
         {
-            return ReadFile(fileNum, seqNum, 0);
-        }
-
-        private Byte[] ReadFile(UInt16 fileNum, UInt16 seqNum, UInt16 volNum)
-        {
             if (fileNum == 0) throw new ArgumentOutOfRangeException("fileNum");
-            if (volNum != 0) throw new ArgumentOutOfRangeException("volNum");
 
             // determine size of file
             Int32 n = 0;
             UInt16 hf = fileNum;
             UInt16 hs = seqNum;
-            Block H = GetFileHeader(hf, hs, 0);
+            Block H = GetFileHeader(hf, hs);
             while (H != null)
             {
                 Int32 map = H[1] * 2; // map area pointer
@@ -750,7 +745,7 @@ namespace FSX
 
                 UInt16 nf = H.ToUInt16(map + 2);
                 UInt16 ns = H.ToUInt16(map + 4);
-                H = (nf == 0) ? null : GetFileHeader(nf, ns, 0);
+                H = (nf == 0) ? null : GetFileHeader(nf, ns);
             }
 
             // read file
@@ -758,7 +753,7 @@ namespace FSX
             Int32 bp = 0;
             hf = fileNum;
             hs = seqNum;
-            H = GetFileHeader(hf, hs, 0);
+            H = GetFileHeader(hf, hs);
             while (H != null)
             {
                 Int32 map = H[1] * 2; // map area pointer
@@ -802,7 +797,7 @@ namespace FSX
 
                 UInt16 nf = H.ToUInt16(map + 2);
                 UInt16 ns = H.ToUInt16(map + 4);
-                H = (nf == 0) ? null : GetFileHeader(nf, ns, 0);
+                H = (nf == 0) ? null : GetFileHeader(nf, ns);
             }
             return buf;
         }
@@ -822,7 +817,7 @@ namespace FSX
                 return false;
             }
             Regex RE = Regex(fileSpec);
-            Byte[] data = ReadFile(dirNum, dirSeq, 0);
+            Byte[] data = ReadFile(dirNum, dirSeq);
             Int32 bp = 0;
             while (bp < data.Length)
             {
@@ -851,92 +846,11 @@ namespace FSX
             return false;
         }
 
-        private Block GetFileBlock(UInt16 fileNum, UInt16 seqNum, Int32 vbn)
-        {
-            return GetFileBlock(fileNum, seqNum, 0, vbn);
-        }
-
-        private Block GetFileBlock(UInt16 fileNum, UInt16 seqNum, UInt16 volNum, Int32 vbn)
-        {
-            if (fileNum == 0) throw new ArgumentOutOfRangeException("fileNum");
-            if (volNum != 0) throw new ArgumentOutOfRangeException("volNum");
-            if (vbn <= 0) throw new ArgumentOutOfRangeException("vbn");
-
-            // get file header
-            Block H = GetFileHeader(fileNum, seqNum, volNum);
-            while (H != null)
-            {
-                Int32 map = H[1] * 2; // map area pointer
-                Int32 CTSZ = H[map + 6];
-                Int32 LBSZ = H[map + 7];
-                Int32 q = map + H[map + 8] * 2 + 10; // end of retrieval pointers
-                Int32 p = map + 10; // start of retrieval pointers
-
-                // identify location of block in file map
-                Int32 ct;
-                Int32 lbn;
-                while (p < q)
-                {
-                    if ((CTSZ == 1) && (LBSZ == 3)) // Format 1 (normal format)
-                    {
-                        lbn = H[p++] << 16;
-                        ct = H[p++];
-                        lbn += H.ToUInt16(ref p);
-                    }
-                    else if ((CTSZ == 2) && (LBSZ == 2)) // Format 2 (not implemented)
-                    {
-                        ct = H.ToUInt16(ref p);
-                        lbn = H.ToUInt16(ref p);
-                    }
-                    else if ((CTSZ == 2) && (LBSZ == 4)) // Format3 (not implemented)
-                    {
-                        ct = H.ToUInt16(ref p);
-                        lbn = H.ToUInt16(ref p) << 16;
-                        lbn += H.ToUInt16(ref p);
-                    }
-                    else // unknown format
-                    {
-                        throw new InvalidDataException();
-                    }
-                    ct++;
-                    if (vbn <= ct) return mDisk[lbn + vbn - 1];
-                    vbn -= ct;
-                }
-
-                // if block wasn't found in this header, fetch next extension header
-                UInt16 nf = H.ToUInt16(map + 2);
-                UInt16 ns = H.ToUInt16(map + 4);
-                H = (nf == 0) ? null : GetFileHeader(nf, ns, 0);
-            }
-            return null;
-        }
-
         private Block GetFileHeader(UInt16 fileNum, UInt16 seqNum)
         {
-            return GetFileHeader(fileNum, seqNum, 0);
-        }
-
-        private Block GetFileHeader(UInt16 fileNum, UInt16 seqNum, UInt16 volNum)
-        {
-            if (fileNum == 0) throw new ArgumentOutOfRangeException("fileNum");
-            if (volNum != 0) throw new ArgumentOutOfRangeException("volNum");
-
-            Block H = mDisk[1]; // home block
-            Int32 IBSZ = H.ToUInt16(0);
-            if (fileNum <= 16)
-            {
-                // first 16 file headers follow index bitmap (at LBN H.IBLB + H.IBSZ)
-                H = mDisk[(H.ToUInt16(2) << 16) + H.ToUInt16(4) + IBSZ + fileNum - 1];
-            }
-            else
-            {
-                // must read index file for remaining file headers
-                // desired header is at index file VBN H.IBSZ + 2 + fileNum
-                H = GetFileBlock(1, 1, 0, IBSZ + 2 + fileNum);
-            }
-
-            if ((H.ToUInt16(2) != fileNum) || (H.ToUInt16(4) != seqNum)) return null;
-            return H;
+            Block H = GetFileHeader(mDisk, fileNum);
+            if ((H != null) && (H.ToUInt16(2) == fileNum) && (H.ToUInt16(4) == seqNum)) return H;
+            return null;
         }
     }
 }

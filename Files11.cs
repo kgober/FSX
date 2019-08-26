@@ -64,6 +64,12 @@
 //  10  H.FPRO  File Protection Code
 //  12  H.FCHA  File Characteristics
 //  14  H.UFAT  User Attribute Area (32 bytes)
+//      +0  F.RTYP  Record Type (R.FIX=1 R.VAR=2)
+//      +1  F.RATT  Record Attributes (FD.CR=2)
+//      +2  F.RSIZ  Record Size
+//      +4  F.HIBK  Highest VBN Allocated
+//      +8  F.EFBK  End of File Block
+//      +12 F.FFBY  First Free Byte (word)
 //
 // File Ident Area
 //  0   I.FNAM  File Name (9 characters as 3 Radix-50 words)
@@ -579,17 +585,25 @@ namespace FSX
                 p = dirSpec.IndexOf(',');
                 if (p != -1)
                 {
-                    Byte m, n;
-                    if (!Byte.TryParse(dirSpec.Substring(0, p), out m) || !Byte.TryParse(dirSpec.Substring(p + 1), out n)) return;
-                    dirSpec = String.Format("{0:D3}{1:D3}", m, n);
+                    Byte prj, prg;
+                    if (!Byte.TryParse(dirSpec.Substring(0, p), out prj) || !Byte.TryParse(dirSpec.Substring(p + 1), out prg)) return;
+                    dirSpec = String.Format("{0:D3}{1:D3}", prj, prg);
                 }
                 if (!FindFile(4, 4, String.Concat(dirSpec, ".DIR;*"), out dirNum, out dirSeq, out dirSpec)) return;
             }
 
             Regex RE = Regex(fileSpec);
+            Block H = GetFileHeader(dirNum, dirSeq);
+            if (H == null) return;
             Byte[] data = ReadFile(dirNum, dirSeq);
+            Byte RTYP = H[14];
+            Byte RATT = H[15];
+            Int32 n = H.ToUInt16(16);
+            Int32 len = (H.ToUInt16(22) << 16) + H.ToUInt16(24); // VBN where EOF is located
+            len = (len - 1) * 512 + H.ToUInt16(26);
+            if (RTYP == 0) len = data.Length;
             Int32 bp = 0;
-            while (bp < data.Length)
+            while (bp < len)
             {
                 UInt16 fnum = BitConverter.ToUInt16(data, bp);
                 if (fnum != 0)
@@ -607,7 +621,7 @@ namespace FSX
                         output.WriteLine("{0} ({1:D0},{2:D0},{3:D0})", fn, fnum, fseq, fvol);
                     }
                 }
-                bp += 16;
+                bp += n;
             }
         }
 
@@ -643,17 +657,123 @@ namespace FSX
 
         public override void ListFile(String fileSpec, Encoding encoding, TextWriter output)
         {
-            Byte[] buf = ReadFile(fileSpec);
-            Int32 p = buf.Length;
-            for (Int32 i = 0; i < buf.Length; i++)
+            String dirSpec = mDir;
+            UInt16 dirNum = mDirNum;
+            UInt16 dirSeq = mDirSeq;
+            Int32 p = fileSpec.IndexOf(']');
+            if (p != -1)
             {
-                if (buf[i] == 26) // ^Z
+                dirSpec = fileSpec.Substring(0, p);
+                fileSpec = fileSpec.Substring(p + 1);
+                p = dirSpec.IndexOf('[');
+                if (p == -1) return;
+                dirSpec = dirSpec.Substring(p + 1);
+                p = dirSpec.IndexOf(',');
+                if (p != -1)
                 {
-                    p = i;
-                    break;
+                    Byte prj, prg;
+                    if (!Byte.TryParse(dirSpec.Substring(0, p), out prj) || !Byte.TryParse(dirSpec.Substring(p + 1), out prg)) return;
+                    dirSpec = String.Format("{0:D3}{1:D3}", prj, prg);
+                }
+                if (!FindFile(4, 4, String.Concat(dirSpec, ".DIR;*"), out dirNum, out dirSeq, out dirSpec)) return;
+            }
+
+            String fileName;
+            UInt16 fileNum, fileSeq;
+            if (!FindFile(dirNum, dirSeq, fileSpec, out fileNum, out fileSeq, out fileName)) return;
+            Block H = GetFileHeader(fileNum, fileSeq);
+            if (H == null) return;
+            Byte RTYP = H[14];
+            Byte RATT = H[15];
+            Int32 n = H.ToUInt16(16);
+            Int32 len = (H.ToUInt16(22) << 16) + H.ToUInt16(24); // VBN where EOF is located
+            len = (len - 1) * 512 + H.ToUInt16(26);
+            Byte[] buf = ReadFile(fileNum, fileSeq);
+            if (RTYP == 0)
+            {
+                p = buf.Length;
+                for (Int32 i = 0; i < buf.Length; i++)
+                {
+                    if (buf[i] == 26) // ^Z
+                    {
+                        p = i;
+                        break;
+                    }
+                }
+                output.Write(encoding.GetString(buf, 0, p));
+            }
+            else if (RTYP == 1)
+            {
+                // TODO: handle FD.BLK (records do not cross block boundaries)
+                p = 0;
+                while (p < len)
+                {
+                    String s = encoding.GetString(buf, p, n);
+                    if ((RATT & 1) != 0) // FD.FTN
+                    {
+                        Char c = (s.Length != 0) ? s[0] : ' ';
+                        if (s.Length != 0) s = s.Substring(1);
+                        switch (c)
+                        {
+                            case '+': break;
+                            case '1': output.Write('\f'); break;
+                            case '0': output.Write('\n'); goto default;
+                            default: output.Write('\n'); break;
+                        }
+                        output.Write(s);
+                        output.Write('\r');
+                    }
+                    else if ((RATT & 2) != 0) // FD.CR
+                    {
+                        output.Write('\n');
+                        output.Write(s);
+                        output.Write('\r');
+                    }
+                    else
+                    {
+                        output.WriteLine(s);
+                    }
+                    p += n;
                 }
             }
-            output.Write(encoding.GetString(buf, 0, p));
+            else if (RTYP == 2)
+            {
+                p = 0;
+                while (p < len)
+                {
+                    while (((p += 2) <= len) && ((n = BitConverter.ToInt16(buf, p - 2)) != -1))
+                    {
+                        String s = (n == 0) ? String.Empty : encoding.GetString(buf, p, n);
+                        if ((RATT & 1) != 0) // FD.FTN
+                        {
+                            Char c = (s.Length != 0) ? s[0] : ' ';
+                            if (s.Length != 0) s = s.Substring(1);
+                            switch (c)
+                            {
+                                case '+': break;
+                                case '1': output.Write('\f'); break;
+                                case '0': output.Write('\n'); goto default;
+                                default: output.Write('\n'); break;
+                            }
+                            output.Write(s);
+                            output.Write('\r');
+                        }
+                        else if ((RATT & 2) != 0) // FD.CR
+                        {
+                            output.Write('\n');
+                            output.Write(s);
+                            output.Write('\r');
+                        }
+                        else
+                        {
+                            output.WriteLine(s);
+                        }
+                        if (((p += n) % 2) != 0) p++;
+                    }
+                    n = p % 512;
+                    if (n != 0) p += 512 - n;
+                }
+            }
         }
 
         public override void DumpFile(String fileSpec, TextWriter output)

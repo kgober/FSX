@@ -37,6 +37,10 @@
 // add support for FAT12 volumes
 // add support for FAT16 volumes
 // add support for CP/M disk images
+// add support for ISO-9660 volumes
+// add support for ZIP files
+// add support for compressed files (.Z)
+// add support for tar files
 
 
 using System;

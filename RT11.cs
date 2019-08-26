@@ -98,10 +98,10 @@ namespace FSX
             }
 
             // ensure disk is at least large enough to contain first directory segment
-            Int32 ds = HomeBlockChecksumOK(disk[1]) ? disk[1].ToUInt16(0x1d4) : defaultDirStart; // assume directory start at block 6 unless home block value valid
+            Int32 ds = IsChecksumOK(disk[1], 510) ? disk[1].ToUInt16(0x1d4) : defaultDirStart; // assume directory start at block 6 unless home block value valid
             if (ds + 1 >= disk.BlockCount)
             {
-                Program.Debug(1, "Disk too small to contain directory segment {0:D0}", 1);
+                Program.Debug(1, "Disk image too small to contain directory segment {0:D0}", 1);
                 return -1;
             }
             if (level == 0) return 0;
@@ -127,7 +127,7 @@ namespace FSX
                 }
                 if (s >= dir.BlockCount)
                 {
-                    Program.Debug(1, "Disk too small to contain directory segment {0:D0}", s);
+                    Program.Debug(1, "Disk image too small to contain directory segment {0:D0}", s);
                     return 0;
                 }
             }
@@ -188,7 +188,7 @@ namespace FSX
             }
             if (level == 2) return 2;
 
-            // level 3 - check directory entries
+            // level 3 - check directory entries (and return volume size)
             s = 1;
             while (s != 0)
             {
@@ -242,6 +242,7 @@ namespace FSX
                     n = seg.ToUInt16(sp + 8); // file length (in blocks)
                     if (((bp += n) > disk.BlockCount) && !(lastfile && (esw & E.MPTY) == E.MPTY))
                     {
+                        // TODO: reconsider reporting this as an error (maybe just return larger size and let disk be padded out)
                         Program.Debug(1, "File allocation exceeds disk size in segment {0:D0}, file {1}", s, fn);
                         return 2;
                     }
@@ -264,7 +265,7 @@ namespace FSX
             }
             if (level == 3) return bp;
 
-            // level 4 - check block allocations
+            // level 4 - check block allocations (and return volume size)
             if (bp < disk.BlockCount) bp = disk.BlockCount;
             BitArray BU = new BitArray(bp); // block usage map
             for (Int32 i = 0; i < 6; i++) BU[i] = true; // mark boot block, home block and reserved blocks as used
@@ -306,12 +307,12 @@ namespace FSX
             return bp;
         }
 
-        private static Boolean HomeBlockChecksumOK(Block block)
+        private static Boolean IsChecksumOK(Block block, Int32 checksumOffset)
         {
             Int32 sum = 0;
-            for (Int32 p = 0; p < 510; p += 2) sum += block.ToUInt16(p);
-            Int32 n = block.ToUInt16(510);
-            Program.Debug(2, "Home block checksum {0}: {1:x4} {2}= {3:x4}", ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
+            for (Int32 p = 0; p < checksumOffset; p += 2) sum += block.ToUInt16(p);
+            Int32 n = block.ToUInt16(checksumOffset);
+            Program.Debug(2, "Block checksum @{0:D0} {1}: {2:x4} {3}= {4:x4}", checksumOffset, ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
             return ((sum != 0) && ((sum % 65536) == n));
         }
 
@@ -388,7 +389,7 @@ namespace FSX
         {
             if (disk.BlockSize != 512) throw new ArgumentException("RT11 volume block size must be 512.");
             mDisk = disk;
-            mDirStart = HomeBlockChecksumOK(disk[1]) ? disk[1].ToUInt16(0x1d4) : defaultDirStart;
+            mDirStart = IsChecksumOK(disk[1], 510) ? disk[1].ToUInt16(0x1d4) : defaultDirStart;
             mDir = new ClusteredDisk(disk, 2, mDirStart - 2, 32);
         }
 

@@ -719,11 +719,19 @@ namespace FSX
             }
 
             // check disk structure
-            if (ODS1.CheckVTOC(disk, 1) == 1) return new ODS1(disk);
-            Int32 size = RT11.CheckVTOC(disk, 3);
-            if (size < 3) return null;
-            else if (size != disk.BlockCount) return new RT11(new PaddedDisk(disk, size - disk.BlockCount));
-            else return new RT11(disk);
+            Int32 size = ODS1.CheckVTOC(disk, 3);
+            if (size >= 3)
+            {
+                if (size != disk.BlockCount) return new ODS1(new PaddedDisk(disk, size - disk.BlockCount));
+                return new ODS1(disk);
+            }
+            size = RT11.CheckVTOC(disk, 3);
+            if (size >= 3)
+            {
+                if (size != disk.BlockCount) return new RT11(new PaddedDisk(disk, size - disk.BlockCount));
+                return new RT11(disk);
+            }
+            return null;
         }
 
         static Byte[] DecompressGZip(Byte[] data)

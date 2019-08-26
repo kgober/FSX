@@ -463,6 +463,13 @@ namespace FSX
             return true;
         }
 
+        private static Boolean IsDigit(Char value, Int32 minDigit, Int32 maxDigit)
+        {
+            Int32 n = value - '0';
+            if ((n < minDigit) || (n > maxDigit)) return false;
+            return true;
+        }
+
         // convert an ODS-1 wildcard pattern to a Regex
         private static Regex Regex(String pattern)
         {
@@ -552,16 +559,23 @@ namespace FSX
                 dirSpec = String.Format("{0:D3}{1:D3}", m, n);
             }
 
-            String fn;
+            String dirName;
             UInt16 fnum, fseq;
-            if (!FindFile(4, 4, String.Concat(dirSpec, ".DIR;*"), out fnum, out fseq, out fn)) return;
+            if (!FindFile(4, 4, String.Concat(dirSpec, ".DIR;*"), out fnum, out fseq, out dirName)) return;
 
-            Boolean f = false;
-            if (fn.Length == 6)
+            p = dirName.IndexOf(".DIR");
+            if (p == 6)
             {
-                for (Int32 i = 0; i < 6; i++) if (!Char.IsDigit(fn, i)) f = true;
+                if (IsDigit(dirName[0], 0, 3) && IsDigit(dirName[1], 0, 7) && IsDigit(dirName[2], 0, 7) && IsDigit(dirName[3], 0, 3) && IsDigit(dirName[4], 0, 7) && IsDigit(dirName[5], 0, 7))
+                {
+                    dirName = String.Format("{0:D0},{1:D0}", Byte.Parse(dirName.Substring(0, 3)), Byte.Parse(dirName.Substring(3, 3)));
+                }
             }
-            mDir = (f) ? String.Concat("[", fn, "]") : String.Format("[{0:D0},{1:D0}]", Byte.Parse(fn.Substring(0, 3)), Byte.Parse(fn.Substring(3, 3)));
+            else if (p != -1)
+            {
+                dirName = dirName.Substring(0, p);
+            }
+            mDir = String.Concat("[", dirName, "]");
             mDirNum = fnum;
             mDirSeq = fseq;
         }
@@ -783,7 +797,49 @@ namespace FSX
 
         public override String FullName(String fileSpec)
         {
-            throw new NotImplementedException();
+            if ((fileSpec == null) || (fileSpec.Length == 0)) return null;
+
+            String dirName = mDir;
+            UInt16 dirNum = mDirNum;
+            UInt16 dirSeq = mDirSeq;
+            Int32 p = fileSpec.IndexOf(']');
+            if (p != -1)
+            {
+                dirName = fileSpec.Substring(0, p);
+                fileSpec = fileSpec.Substring(p + 1);
+                if (fileSpec.Length == 0) return null;
+                p = dirName.IndexOf('[');
+                if (p == -1) return null;
+                dirName = dirName.Substring(p + 1);
+                p = dirName.IndexOf(',');
+                if (p != -1)
+                {
+                    Byte m, n;
+                    if (!Byte.TryParse(dirName.Substring(0, p), out m) || !Byte.TryParse(dirName.Substring(p + 1), out n)) return null;
+                    dirName = String.Format("{0:D3}{1:D3}", m, n);
+                }
+                if (!FindFile(4, 4, String.Concat(dirName, ".DIR;*"), out dirNum, out dirSeq, out dirName)) return null;
+            }
+
+            p = dirName.IndexOf(".DIR");
+            if (p == 6)
+            {
+                if (IsDigit(dirName[0], 0, 3) && IsDigit(dirName[1], 0, 7) && IsDigit(dirName[2], 0, 7) && IsDigit(dirName[3], 0, 3) && IsDigit(dirName[4], 0, 7) && IsDigit(dirName[5], 0, 7))
+                {
+                    dirName = String.Format("{0:D0},{1:D0}", Byte.Parse(dirName.Substring(0, 3)), Byte.Parse(dirName.Substring(3, 3)));
+                }
+            }
+            else if (p != -1)
+            {
+                dirName = dirName.Substring(0, p);
+            }
+            dirName = String.Concat("[", dirName, "]");
+
+            String fileName;
+            UInt16 fileNum, fileSeq;
+            if (!FindFile(dirNum, dirSeq, fileSpec, out fileNum, out fileSeq, out fileName)) return null;
+
+            return String.Concat(dirName, fileName);
         }
 
         public override Byte[] ReadFile(String fileSpec)
@@ -1036,7 +1092,10 @@ namespace FSX
                     {
                         fileNum = fnum;
                         fileSeq = BitConverter.ToUInt16(data, bp + 2);
-                        fileName = fn;
+                        fn = String.Concat(fn1, fn2, fn3);
+                        while (fn.EndsWith(" ")) fn = fn.Substring(0, fn.Length - 1);
+                        while (ext.EndsWith(" ")) ext = ext.Substring(0, ext.Length - 1);
+                        fileName = String.Format("{0}.{1};{2:D0}", fn, ext, ver);
                         return true;
                     }
                 }

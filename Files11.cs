@@ -804,7 +804,89 @@ namespace FSX
 
         public override Boolean SaveFS(String fileName, String format)
         {
-            throw new NotImplementedException();
+            // RX01 and RX02 images should be written as physical images (including track 0)
+            // all other images (including RX50) should be written as logical images
+            FileStream f = new FileStream(fileName, FileMode.Create);
+            Disk d = mDisk;
+            Int32 n = CheckVTOC(d, 3);
+            if ((n == 494) || (n == 988)) // RX01 and RX02 sizes
+            {
+                Boolean iFlag = (d is InterleavedDisk);
+                while (d.BaseDisk != null)
+                {
+                    d = d.BaseDisk;
+                    if (d is InterleavedDisk) iFlag = true;
+                }
+                if (iFlag)
+                {
+                    // the base image is already in physical format
+                    if (d.MaxCylinder == 75)
+                    {
+                        // base image lacks track 0
+                        Byte[] buf = new Byte[d.BlockSize];
+                        for (Int32 s = 0; s < 26; s++) f.Write(buf, 0, d.BlockSize);
+                        for (Int32 t = 0; t < 76; t++)
+                        {
+                            for (Int32 s = 1; s <= 26; s++)
+                            {
+                                d[t, 0, s].CopyTo(buf, 0);
+                                f.Write(buf, 0, d.BlockSize);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // base image includes track 0
+                        Byte[] buf = new Byte[d.BlockSize];
+                        for (Int32 t = 0; t < 77; t++)
+                        {
+                            for (Int32 s = 1; s <= 26; s++)
+                            {
+                                d[t, 0, s].CopyTo(buf, 0);
+                                f.Write(buf, 0, d.BlockSize);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // physical image must be created
+                    Int32 SPB = 512 / d.BlockSize;
+                    Int32[,] map = new Int32[76, 26];
+                    for (Int32 lsn = 0; lsn < n * SPB; lsn++)
+                    {
+                        Int32 t = lsn / 26;
+                        Int32 s = lsn % 26;
+                        s *= 2; // 2:1 interleave
+                        if (s >= 26) s++; // 2 interleave cycles per track
+                        s += t * 6; // skew
+                        s %= 26;
+                        map[t, s] = lsn;
+                    }
+                    Byte[] buf = new Byte[d.BlockSize];
+                    for (Int32 s = 0; s < 26; s++) f.Write(buf, 0, d.BlockSize);
+                    for (Int32 t = 0; t < 76; t++)
+                    {
+                        for (Int32 s = 0; s < 26; s++)
+                        {
+                            Int32 lsn = map[t, s];
+                            mDisk[lsn / SPB].CopyTo(buf, 0, (lsn % SPB) * d.BlockSize, d.BlockSize);
+                            f.Write(buf, 0, d.BlockSize);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                Byte[] buf = new Byte[512];
+                for (Int32 i = 0; i < n; i++)
+                {
+                    d[i].CopyTo(buf, 0);
+                    f.Write(buf, 0, 512);
+                }
+            }
+            f.Close();
+            return true;
         }
 
         private Boolean FindFile(UInt16 dirNum, UInt16 dirSeq, String fileSpec, out UInt16 fileNum, out UInt16 fileSeq, out String fileName)

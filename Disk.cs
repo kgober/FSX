@@ -20,6 +20,13 @@
 // SOFTWARE.
 
 
+// Future Improvements / To Do
+// add Disk.Info to store more detail (e.g. .IMD image descriptions)
+// implement Block.ToByte, ToInt16, ToInt32, ToUInt32
+// provide a way to pad an image with leading zeros
+// support disk partitioning (more efficiently than ClusteredDisk)
+
+
 using System;
 
 namespace FSX

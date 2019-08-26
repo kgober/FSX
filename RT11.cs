@@ -43,6 +43,12 @@
 // files, and used the high 2 bits in date words to extend the representable year.
 // Home block checksums were populated using the Files-11 algorithm.
 
+
+// Future Improvements / To Do
+// allow files to be written/deleted in images
+// find a better place for the below comments (maybe DEC.cs)
+
+
 // DEC RX01 Floppy - IBM 3740 format (8" SSSD diskette, 77 tracks, 26 sectors)
 //
 // DEC operating systems typically do not use track 0, so an RX01 diskette

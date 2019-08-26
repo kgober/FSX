@@ -41,6 +41,15 @@
 // 8250 only    78-116:0-28 117-130:0-26 131-141:0-24 142-154:0-22
 
 
+// Future Improvements / To Do
+// implement CheckVTOC level 3 (check directory entries)
+// implement CheckVTOC level 4 (check block allocation)
+// infer missing file extension when saving images
+// add support for 1571 format (and .D71 files)
+// add support for 1581 format (and .D81 files)
+// allow files to be written/deleted in images
+
+
 using System;
 using System.IO;
 using System.Text;

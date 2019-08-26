@@ -33,6 +33,14 @@
 // can be differentiated by looking at the last indirect block.
 
 
+// Improvements / To Do
+// support Unix v6 inode format (and identify when to use it)
+// support Unix v7 file system format
+// support 2BSD file system format (v7 with 1KB blocks)
+// support BSD Fast File System (FFS)
+// allow files to be written/deleted in images
+
+
 using System;
 using System.IO;
 using System.Text;

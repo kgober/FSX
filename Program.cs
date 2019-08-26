@@ -28,6 +28,17 @@
 // represent a transformation of an underlying Disk (e.g. clustering or interleaving).
 
 
+// Future Improvements / To Do
+// improve exception handling
+// improve argument parsing
+// allow output redirection
+// allow reading commands from a file
+// move TryDEC elsewhere (DEC.cs maybe)
+// add support for FAT12 volumes
+// add support for FAT16 volumes
+// add support for CP/M disk images
+
+
 using System;
 using System.Collections.Generic;
 using System.IO;

@@ -95,6 +95,16 @@
 //  10  M.RTRV  Retrieval Pointers (M.MAX words)
 
 
+// Future Improvements / To Do
+// check file header Ident Area fields
+// implement CheckVTOC level 4 (check file headers)
+// implement CheckVTOC level 5 (check block allocation)
+// support fixed/variable records in ReadFile (e.g. to allow saving a text file)
+// support additional file types/flags (e.g. FD.BLK)
+// display size, protection, owner, dates in directory listings
+// allow files to be written/deleted in images
+
+
 using System;
 using System.IO;
 using System.Text;
@@ -379,7 +389,7 @@ namespace FSX
             return bLim;
 
             // level 4 - check file headers (and return volume size)
-            // like checking the index file 1,1, except for filenums >1
+            // like checking the index file 1,1, except for filenums >2
 
             // level 5 - check block allocation (and return volume size)
         }

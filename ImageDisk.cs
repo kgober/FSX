@@ -20,6 +20,11 @@
 // SOFTWARE.
 
 
+// Future Improvements / To Do
+// use better heuristic to guess default sector size
+// support cylinder/head mapping
+// support .IMD file writing
+
 using System;
 
 namespace FSX

@@ -20,6 +20,10 @@
 // SOFTWARE.
 
 
+// Future Improvements / To Do
+// eliminate DumpDir (merge functionality into DumpFile)
+
+
 using System;
 using System.IO;
 using System.Text;

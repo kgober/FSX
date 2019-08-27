@@ -22,7 +22,7 @@
 
 // Future Improvements / To Do
 // add Disk.Info to store more detail (e.g. .IMD image descriptions)
-// implement Block.ToByte, ToInt16, ToInt32, ToUInt32
+// implement Block.ToByte, ToInt32, ToUInt32
 // provide a way to pad an image with leading zeros
 // support disk partitioning (more efficiently than ClusteredDisk)
 
@@ -37,6 +37,8 @@ namespace FSX
         public abstract Byte this[Int32 offset] { get; set; }
         public abstract void CopyTo(Byte[] targetBuffer, Int32 targetOffset);
         public abstract void CopyTo(Byte[] targetBuffer, Int32 targetOffset, Int32 blockOffset, Int32 count);
+        public abstract Int16 ToInt16(Int32 startIndex);
+        public abstract Int16 ToInt16(ref Int32 startIndex);
         public abstract UInt16 ToUInt16(Int32 startIndex);
         public abstract UInt16 ToUInt16(ref Int32 startIndex);
     }
@@ -122,6 +124,18 @@ namespace FSX
         public override void CopyTo(Byte[] targetBuffer, Int32 targetOffset, Int32 blockOffset, Int32 count)
         {
             for (Int32 i = 0; i < count; i++) targetBuffer[targetOffset++] = mData[blockOffset++];
+        }
+
+        public override Int16 ToInt16(Int32 startIndex)
+        {
+            return BitConverter.ToInt16(mData, startIndex);
+        }
+
+        public override Int16 ToInt16(ref Int32 startIndex)
+        {
+            Int16 n = BitConverter.ToInt16(mData, startIndex);
+            startIndex += 2;
+            return n;
         }
 
         public override UInt16 ToUInt16(Int32 startIndex)
@@ -678,6 +692,32 @@ namespace FSX
                     blockOffset = 0;
                     count -= n;
                 }
+            }
+
+            public override Int16 ToInt16(Int32 startIndex)
+            {
+                Int32 i = startIndex;
+                return ToInt16(ref i);
+            }
+
+            public override Int16 ToInt16(ref Int32 startIndex)
+            {
+                Int32 p = startIndex / mBlockSize;
+                Int32 q = startIndex % mBlockSize;
+                Int16 n;
+                if (q + 1 < mBlockSize)
+                {
+                    n = mData[p].ToInt16(q);
+                }
+                else
+                {
+                    Byte[] buf = new Byte[2];
+                    buf[0] = mData[p][q];
+                    buf[1] = mData[p + 1][0];
+                    n = BitConverter.ToInt16(buf, 0);
+                }
+                startIndex += 2;
+                return n;
             }
 
             public override UInt16 ToUInt16(Int32 startIndex)

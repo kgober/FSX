@@ -34,6 +34,9 @@
 
 
 // Improvements / To Do
+// implement CheckVTOC level 2 (check directory structure)
+// implement CheckVTOC level 3 (check inode allocation)
+// implement CheckVTOC level 4 (check block allocation)
 // support Unix v6 inode format (and identify when to use it)
 // support Unix v7 file system format
 // support 2BSD file system format (v7 with 1KB blocks)
@@ -101,6 +104,30 @@ namespace FSX
                 Program.Debug(1, "I-list size in super-block exceeds volume size ({0:D0} > {1:D0})", isize + 2, fsize);
                 return 0;
             }
+            Int32 n = B.ToInt16(4); // number of blocks in super-block free block list
+            if ((n < 1) || (n > 100))
+            {
+                Program.Debug(1, "Free block count in super-block invalid (is {0:D0}, expected 1 <= n <= 100)", n);
+                return 0;
+            }
+            for (Int32 i = 0; i < 200; i += 2)
+                if (((n = B.ToUInt16(6 + i)) < isize + 2) || (n >= fsize))
+                {
+                    Program.Debug(1, "Free block {0:D0} in super-block invalid (is {1:D0}, expected {2:D0} <= n < {3:D0})", i / 2, n, isize + 2, fsize);
+                    return 0;
+                }
+            n = B.ToInt16(206); // number of inodes in super-block free inode list
+            if (n > 100)
+            {
+                Program.Debug(1, "Free inode count in super-block invalid (is {0:D0}, expected n <= 100)", n);
+                return 0;
+            }
+            for (Int32 i = 0; i < 200; i += 2)
+                if (((n = B.ToUInt16(208 + i)) < 1) || (n > isize * 16))
+                {
+                    Program.Debug(1, "Free inode {0:D0} in super-block invalid (is {1:D0}, expected 1 <= n <= {2:D0})", i / 2, n, isize * 16);
+                    return 0;
+                }
             return fsize;
 
             // level 2 - check directory structure (and return volume size)

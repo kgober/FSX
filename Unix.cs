@@ -78,8 +78,8 @@ namespace FSX
                 return null;
             }
 
-            Int32 size = CheckVTOC(disk, 1);
-            if (size < 1) return null;
+            Int32 size = CheckVTOC(disk, 2);
+            if (size < 2) return null;
             else if (size != disk.BlockCount) return new Unix(new PaddedDisk(disk, size - disk.BlockCount));
             else return new Unix(disk);
         }

@@ -22,7 +22,7 @@
 
 // Future Improvements / To Do
 // add Disk.Info to store more detail (e.g. .IMD image descriptions)
-// implement Block.ToByte, ToInt32, ToUInt32
+// implement Block.ToInt32, ToUInt32
 // provide a way to pad an image with leading zeros
 // support disk partitioning (more efficiently than ClusteredDisk)
 
@@ -37,6 +37,8 @@ namespace FSX
         public abstract Byte this[Int32 offset] { get; set; }
         public abstract void CopyTo(Byte[] targetBuffer, Int32 targetOffset);
         public abstract void CopyTo(Byte[] targetBuffer, Int32 targetOffset, Int32 blockOffset, Int32 count);
+        public abstract Byte ToByte(Int32 startIndex);
+        public abstract Byte ToByte(ref Int32 startIndex);
         public abstract Int16 ToInt16(Int32 startIndex);
         public abstract Int16 ToInt16(ref Int32 startIndex);
         public abstract UInt16 ToUInt16(Int32 startIndex);
@@ -124,6 +126,16 @@ namespace FSX
         public override void CopyTo(Byte[] targetBuffer, Int32 targetOffset, Int32 blockOffset, Int32 count)
         {
             for (Int32 i = 0; i < count; i++) targetBuffer[targetOffset++] = mData[blockOffset++];
+        }
+
+        public override Byte ToByte(Int32 startIndex)
+        {
+            return mData[startIndex];
+        }
+
+        public override Byte ToByte(ref Int32 startIndex)
+        {
+            return mData[startIndex++];
         }
 
         public override Int16 ToInt16(Int32 startIndex)
@@ -692,6 +704,18 @@ namespace FSX
                     blockOffset = 0;
                     count -= n;
                 }
+            }
+
+            public override Byte ToByte(Int32 startIndex)
+            {
+                return mData[startIndex / mBlockSize][startIndex % mBlockSize];
+            }
+
+            public override Byte ToByte(ref Int32 startIndex)
+            {
+                Byte n = mData[startIndex / mBlockSize][startIndex % mBlockSize];
+                startIndex++;
+                return n;
             }
 
             public override Int16 ToInt16(Int32 startIndex)

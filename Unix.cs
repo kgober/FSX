@@ -44,7 +44,6 @@
 
 
 // Improvements / To Do
-// implement CheckVTOC level 2 (check directory structure)
 // implement CheckVTOC level 3 (check inode allocation)
 // implement CheckVTOC level 4 (check block allocation)
 // support Unix v6 inode format (and identify when to use it)
@@ -55,6 +54,8 @@
 
 
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -85,10 +86,11 @@ namespace FSX
 
         // level 0 - check basic disk parameters
         // level 1 - check super-block (and return volume size)
+        // level 2 - check directory structure (and return volume size)
         public static Int32 CheckVTOC(Disk disk, Int32 level)
         {
             if (disk == null) throw new ArgumentNullException("disk");
-            if ((level < 0) || (level > 1)) throw new ArgumentOutOfRangeException("level");
+            if ((level < 0) || (level > 2)) throw new ArgumentOutOfRangeException("level");
 
             // level 0 - check basic disk parameters
             if (disk.BlockSize != 512)
@@ -114,34 +116,104 @@ namespace FSX
                 Program.Debug(1, "I-list size in super-block exceeds volume size ({0:D0} > {1:D0})", isize + 2, fsize);
                 return 0;
             }
-            Int32 n = B.ToInt16(4); // number of blocks in super-block free block list
-            if ((n < 1) || (n > 100))
+            Int32 p = B.ToInt16(4); // number of blocks in super-block free block list
+            if ((p < 1) || (p > 100))
             {
-                Program.Debug(1, "Free block count in super-block invalid (is {0:D0}, expected 1 <= n <= 100)", n);
+                Program.Debug(1, "Free block count in super-block invalid (is {0:D0}, expected 1 <= n <= 100)", p);
                 return 0;
             }
-            for (Int32 i = 0; i < 200; i += 2)
-                if (((n = B.ToUInt16(6 + i)) < isize + 2) || (n >= fsize))
+            Int32 n = 2 * p;
+            for (Int32 i = 0; i < n; i += 2)
+                if (((p = B.ToUInt16(6 + i)) < isize + 2) || (p >= fsize))
                 {
-                    Program.Debug(1, "Free block {0:D0} in super-block invalid (is {1:D0}, expected {2:D0} <= n < {3:D0})", i / 2, n, isize + 2, fsize);
+                    Program.Debug(1, "Free block {0:D0} in super-block invalid (is {1:D0}, expected {2:D0} <= n < {3:D0})", i / 2, p, isize + 2, fsize);
                     return 0;
                 }
-            n = B.ToInt16(206); // number of inodes in super-block free inode list
-            if (n > 100)
+            p = B.ToInt16(206); // number of inodes in super-block free inode list
+            if (p > 100)
             {
-                Program.Debug(1, "Free inode count in super-block invalid (is {0:D0}, expected n <= 100)", n);
+                Program.Debug(1, "Free inode count in super-block invalid (is {0:D0}, expected n <= 100)", p);
                 return 0;
             }
-            for (Int32 i = 0; i < 200; i += 2)
-                if (((n = B.ToUInt16(208 + i)) < 1) || (n > isize * 16))
+            n = 2 * p;
+            for (Int32 i = 0; i < n; i += 2)
+                if (((p = B.ToUInt16(208 + i)) < 1) || (p > isize * 16))
                 {
-                    Program.Debug(1, "Free inode {0:D0} in super-block invalid (is {1:D0}, expected 1 <= n <= {2:D0})", i / 2, n, isize * 16);
+                    Program.Debug(1, "Free inode {0:D0} in super-block invalid (is {1:D0}, expected 1 <= n <= {2:D0})", i / 2, p, isize * 16);
                     return 0;
                 }
-            return fsize;
+            if (level == 1) return fsize;
 
             // level 2 - check directory structure (and return volume size)
-            // TODO
+            Inode iNode = Inode.Get(disk, 1);
+            if ((iNode.flags & 0xe000) != 0xc000)
+            {
+                Program.Debug(1, "Root directory inode type/used flags invalid (is 0x{0:X4}, expected 0xC000)", iNode.flags & 0xe000);
+                return 1;
+            }
+            BitArray IMap = new BitArray(isize * 16 + 1, false); // which inodes have been seen already
+            Queue<Int32> DirList = new Queue<Int32>(); // which directories need to be looked at
+            DirList.Enqueue((1 << 16) + 1);
+            while (DirList.Count != 0)
+            {
+                Int32 dNum = DirList.Dequeue();
+                Int32 pNum = dNum >> 16;
+                dNum &= 0xffff;
+                if (IMap[dNum])
+                {
+                    Program.Debug(1, "Directory i-number {0:D0} appears more than once in directory structure", dNum);
+                    return 1;
+                }
+                IMap[dNum] = true;
+                Byte[] data = ReadFile(disk, Inode.Get(disk, dNum));
+                Boolean sf = false;
+                Boolean pf = false;
+                for (Int32 bp = 0; bp < data.Length; bp += 16)
+                {
+                    Int32 iNum = BitConverter.ToUInt16(data, bp);
+                    if (iNum == 0) continue;
+                    for (p = 2; p < 16; p++) if (data[bp + p] == 0) break;
+                    String name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
+                    if (String.Compare(name, ".") == 0)
+                    {
+                        if (iNum != dNum)
+                        {
+                            Program.Debug(1, "In Directory i={0:D0}, entry \".\" does not refer to self (is {0:D0}, expected {1:D0})", dNum, iNum, dNum);
+                            return 1;
+                        }
+                        sf = true;
+                    }
+                    else if (String.Compare(name, "..") == 0)
+                    {
+                        if (iNum != pNum)
+                        {
+                            Program.Debug(1, "In Directory i={0:D0}, entry \"..\" does not refer to parent (is {0:D0}, expected {1:D0})", dNum, iNum, pNum);
+                            return 1;
+                        }
+                        pf = true;
+                    }
+                    else if ((iNum < 2) || (iNum > isize * 16))
+                    {
+                        Program.Debug(1, "In Directory i={0:D0}, entry \"{1}\" has invalid i-number (is {2:D0}, expected 2 <= n <= {3:D0})", dNum, name, iNum, isize * 16);
+                        return 1;
+                    }
+                    else if (((iNode = Inode.Get(disk, iNum)).flags & 0x8000) == 0)
+                    {
+                        Program.Debug(1, "In Directory i={0:D0}, entry \"{1}\" links to unallocated i-node {2:D0}", dNum, name, iNum);
+                        return 1;
+                    }
+                    else if ((iNode.flags & 0x6000) == 0x4000)
+                    {
+                        DirList.Enqueue((dNum << 16) + iNum);
+                    }
+                }
+                if (!sf || !pf)
+                {
+                    Program.Debug(1, "In Directory i={0:D0}, entry \".\" or \"..\" is missing", dNum);
+                    return 1;
+                }
+            }
+            return fsize;
 
             // level 3 - check inode allocation (and return volume size)
             // TODO
@@ -150,10 +222,44 @@ namespace FSX
             // TODO
         }
 
+        private static Byte[] ReadFile(Disk disk, Inode iNode)
+        {
+            Byte[] buf = new Byte[iNode.size];
+            if ((iNode.flags & 0x1000) == 0)
+            {
+                // Unix v5/v6 - inode links to 8 direct blocks
+                for (Int32 p = 0; p < iNode.size; p += 512)
+                {
+                    Int32 b = iNode[p / 512]; // direct block
+                    if (b == 0) continue;
+                    Int32 c = iNode.size - p;
+                    disk[b].CopyTo(buf, p, 0, (c > 512) ? 512 : c);
+                }
+            }
+            else
+            {
+                // Unix v5 - inode links to 8 indirect blocks
+                // TODO: handle Unix v6
+                for (Int32 p = 0; p < iNode.size; p += 512)
+                {
+                    Int32 b = p / 512;
+                    Int32 i = iNode[b / 256]; // indirect block
+                    if (i == 0) continue;
+                    b = disk[i].ToUInt16((b % 256) * 2); // direct block
+                    if (b == 0) continue;
+                    Int32 c = iNode.size - p;
+                    disk[b].CopyTo(buf, p, 0, (c > 512) ? 512 : c);
+                }
+            }
+            return buf;
+        }
+
         private static Regex Regex(String pattern)
         {
             String p = pattern;
+            p = p.Replace(".", "\ufffd");
             p = p.Replace("?", ".").Replace("*", @".*");
+            p = p.Replace("\ufffd", "\\.");
             p = String.Concat("^", p, "$");
             Program.Debug(2, "Regex: {0} => {1}", pattern, p);
             return new Regex(p);
@@ -287,7 +393,7 @@ namespace FSX
             // count number of blocks used
             Int32 n = 0;
             Regex RE = Regex(fileSpec);
-            Byte[] data = ReadFile(dirNode);
+            Byte[] data = ReadFile(mDisk, dirNode);
             for (Int32 bp = 0; bp < data.Length; bp += 16)
             {
                 Int32 iNum = BitConverter.ToUInt16(data, bp);
@@ -349,7 +455,7 @@ namespace FSX
             Inode iNode;
             String name;
             if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return;
-            String buf = encoding.GetString(ReadFile(iNode));
+            String buf = encoding.GetString(ReadFile(mDisk, iNode));
             Int32 p = 0;
             for (Int32 i = 0; i < buf.Length; i++)
             {
@@ -364,7 +470,7 @@ namespace FSX
             Inode iNode;
             String name;
             if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return;
-            Program.Dump(null, ReadFile(iNode), output, 16, 512, Program.DumpOptions.ASCII);
+            Program.Dump(null, ReadFile(mDisk, iNode), output, 16, 512, Program.DumpOptions.ASCII);
         }
 
         public override String FullName(String fileSpec)
@@ -380,39 +486,7 @@ namespace FSX
             Inode iNode;
             String name;
             if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return new Byte[0];
-            return ReadFile(iNode);
-        }
-
-        private Byte[] ReadFile(Inode iNode)
-        {
-            Byte[] buf = new Byte[iNode.size];
-            if ((iNode.flags & 0x1000) == 0)
-            {
-                // Unix v5/v6 - inode links to 8 direct blocks
-                for (Int32 p = 0; p < iNode.size; p += 512)
-                {
-                    Int32 b = iNode[p / 512]; // direct block
-                    if (b == 0) continue;
-                    Int32 c = iNode.size - p;
-                    mDisk[b].CopyTo(buf, p, 0, (c > 512) ? 512 : c);
-                }
-            }
-            else
-            {
-                // Unix v5 - inode links to 8 indirect blocks
-                // TODO: handle Unix v6
-                for (Int32 p = 0; p < iNode.size; p += 512)
-                {
-                    Int32 b = p / 512;
-                    Int32 i = iNode[b / 256]; // indirect block
-                    if (i == 0) continue;
-                    b = mDisk[i].ToUInt16((b % 256) * 2); // direct block
-                    if (b == 0) continue;
-                    Int32 c = iNode.size - p;
-                    mDisk[b].CopyTo(buf, p, 0, (c > 512) ? 512 : c);
-                }
-            }
-            return buf;
+            return ReadFile(mDisk, iNode);
         }
 
         public override Boolean SaveFS(String fileName, String format)
@@ -457,7 +531,7 @@ namespace FSX
 
             // find the file in the final directory
             Regex RE = Regex(pathSpec);
-            Byte[] data = ReadFile(dirNode);
+            Byte[] data = ReadFile(mDisk, dirNode);
             for (Int32 bp = 0; bp < data.Length; bp += 16)
             {
                 Int32 iNum = BitConverter.ToUInt16(data, bp);

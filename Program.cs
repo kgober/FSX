@@ -31,6 +31,7 @@
 // Future Improvements / To Do
 // improve exception handling
 // improve argument parsing
+// allow 'force' mount of damaged or unrecognizable volumes
 // allow output redirection
 // allow reading commands from a file
 // move TryDEC elsewhere (DEC.cs maybe)
@@ -81,13 +82,79 @@ namespace FSX
         static void Main(String[] args)
         {
             // parse command-line arguments
-            // (none yet)
+            Boolean run = true;
+            Int32 ap = 0;
+            while (ap < args.Length)
+            {
+                String arg = args[ap++];
+                if (arg.Length == 0)
+                {
+                    Console.Error.WriteLine(@"Unrecognized zero-length command-line option """".");
+                    run = false;
+                }
+                else if ((arg[0] == '-') || (arg[0] == '/'))
+                {
+                    String opt = arg.Substring(1);
+                    if (opt.StartsWith("d", StringComparison.OrdinalIgnoreCase))
+                    {
+                        opt = opt.Substring(1);
+                        if ((opt.Length == 0) && (ap < args.Length)) opt = args[ap++];
+                        Int32 n;
+                        if ((Int32.TryParse(opt, out n)) && (n >= 0) && (n <= 9)) // 0-9 limit is arbitrary
+                        {
+                            DebugLevel = n;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine(@"{0} requires a numeric argument 0-9, not ""{1}"".", arg.Substring(0, 2), opt);
+                            run = false;
+                        }
+                    }
+                    else if (opt.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                    {
+                        opt = opt.Substring(1);
+                        if ((opt.Length == 0) && (ap < args.Length)) opt = args[ap++];
+                        Int32 n;
+                        if ((Int32.TryParse(opt, out n)) && (n >= 0) && (n <= 9)) // 0-9 limit is arbitrary
+                        {
+                            Verbose = n;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine(@"{0} requires a numeric argument 0-9, not ""{1}"".", arg.Substring(0, 2), opt);
+                            run = false;
+                        }
+                    }
+                    else if (opt.StartsWith("?"))
+                    {
+                        Console.Error.WriteLine(@"File System eXchange - a utility to access data stored in disk images");
+                        Console.Error.WriteLine(@"Usage: FSX [options]");
+                        Console.Error.WriteLine(@"Options:");
+                        Console.Error.WriteLine(@"  -v num - set verbosity level to 'num' (0-9)");
+                        Console.Error.WriteLine(@"  -d num - set debug level to 'num' (0-9)");
+                        Console.Error.WriteLine(@"  -? - display this message");
+                        Console.Error.WriteLine(@"At the 'FSX>' prompt, enter ""help"" for more information.");
+                        run = false;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine(@"Unrecognized command-line option ""{0}"".", arg);
+                        run = false;
+                    }
+                }
+                else
+                {
+                    Console.Error.WriteLine(@"Unrecognized command-line option ""{0}"".", arg);
+                    run = false;
+                }
+            }
+            if (!run) return;
 
             // import host volumes
             MountHostVolumes();
 
             // command loop
-            while (true)
+            while (run)
             {
                 String cmd, arg;
                 Console.Error.Write("\nFSX>");

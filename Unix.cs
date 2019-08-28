@@ -44,7 +44,6 @@
 
 
 // Improvements / To Do
-// implement CheckVTOC level 3 (check inode allocation)
 // implement CheckVTOC level 4 (check block allocation)
 // support Unix v6 inode format (and identify when to use it)
 // support Unix v7 file system format
@@ -54,7 +53,6 @@
 
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -78,8 +76,8 @@ namespace FSX
                 return null;
             }
 
-            Int32 size = CheckVTOC(disk, 2);
-            if (size < 2) return null;
+            Int32 size = CheckVTOC(disk, 3);
+            if (size < 3) return null;
             else if (size != disk.BlockCount) return new Unix(new PaddedDisk(disk, size - disk.BlockCount));
             else return new Unix(disk);
         }
@@ -87,10 +85,11 @@ namespace FSX
         // level 0 - check basic disk parameters
         // level 1 - check super-block (and return volume size)
         // level 2 - check directory structure (and return volume size)
+        // level 3 - check inode allocation (and return volume size)
         public static Int32 CheckVTOC(Disk disk, Int32 level)
         {
             if (disk == null) throw new ArgumentNullException("disk");
-            if ((level < 0) || (level > 2)) throw new ArgumentOutOfRangeException("level");
+            if ((level < 0) || (level > 3)) throw new ArgumentOutOfRangeException("level");
 
             // level 0 - check basic disk parameters
             if (disk.BlockSize != 512)
@@ -151,7 +150,7 @@ namespace FSX
                 Program.Debug(1, "Root directory inode type/used flags invalid (is 0x{0:X4}, expected 0xC000)", iNode.flags & 0xe000);
                 return 1;
             }
-            BitArray IMap = new BitArray(isize * 16 + 1, false); // which inodes have been seen already
+            UInt16[] IMap = new UInt16[isize * 16 + 1]; // inode links seen in directories
             Queue<Int32> DirList = new Queue<Int32>(); // which directories need to be looked at
             DirList.Enqueue((1 << 16) + 1);
             while (DirList.Count != 0)
@@ -159,12 +158,12 @@ namespace FSX
                 Int32 dNum = DirList.Dequeue();
                 Int32 pNum = dNum >> 16;
                 dNum &= 0xffff;
-                if (IMap[dNum])
+                if (IMap[dNum] != 0)
                 {
                     Program.Debug(1, "Directory i-number {0:D0} appears more than once in directory structure", dNum);
                     return 1;
                 }
-                IMap[dNum] = true;
+                IMap[dNum]++; // assume a link to this directory from its parent (root directory gets fixed later)
                 Byte[] data = ReadFile(disk, Inode.Get(disk, dNum));
                 Boolean sf = false;
                 Boolean pf = false;
@@ -181,6 +180,7 @@ namespace FSX
                             Program.Debug(1, "In Directory i={0:D0}, entry \".\" does not refer to self (is {0:D0}, expected {1:D0})", dNum, iNum, dNum);
                             return 1;
                         }
+                        IMap[iNum]++;
                         sf = true;
                     }
                     else if (String.Compare(name, "..") == 0)
@@ -190,6 +190,7 @@ namespace FSX
                             Program.Debug(1, "In Directory i={0:D0}, entry \"..\" does not refer to parent (is {0:D0}, expected {1:D0})", dNum, iNum, pNum);
                             return 1;
                         }
+                        IMap[iNum]++;
                         pf = true;
                     }
                     else if ((iNum < 2) || (iNum > isize * 16))
@@ -202,9 +203,13 @@ namespace FSX
                         Program.Debug(1, "In Directory i={0:D0}, entry \"{1}\" links to unallocated i-node {2:D0}", dNum, name, iNum);
                         return 1;
                     }
-                    else if ((iNode.flags & 0x6000) == 0x4000)
+                    else if ((iNode.flags & 0x6000) == 0x4000) // directory
                     {
                         DirList.Enqueue((dNum << 16) + iNum);
+                    }
+                    else // non-directory
+                    {
+                        IMap[iNum]++;
                     }
                 }
                 if (!sf || !pf)
@@ -213,10 +218,30 @@ namespace FSX
                     return 1;
                 }
             }
-            return fsize;
+            IMap[1]--; // root directory has no parent, so back out the implied parent link
+            if (level == 2) return fsize;
 
             // level 3 - check inode allocation (and return volume size)
-            // TODO
+            for (Int32 i = 1; i <= isize * 16; i++)
+            {
+                iNode = Inode.Get(disk, i);
+                if (((iNode.flags & 0x8000) == 0) && (IMap[i] != 0))
+                {
+                    Program.Debug(1, "Inode {0:D0} is marked as free, but has {1:D0} link(s)", i, IMap[i]);
+                    return 2;
+                }
+                if (((iNode.flags & 0x8000) != 0) && (IMap[i] == 0))
+                {
+                    Program.Debug(1, "Inode {0:D0} is marked as allocated, but has no links", i);
+                    return 2;
+                }
+                if (((iNode.flags & 0x8000) != 0) && (IMap[i] != iNode.nlinks))
+                {
+                    Program.Debug(1, "Inode {0:D0} link count mismatch (is {1:D0}, expected {2:D0})", i, iNode.nlinks, IMap[i]);
+                    return 2;
+                }
+            }
+            return fsize;
 
             // level 4 - check block allocation (and return volume size)
             // TODO

@@ -44,7 +44,6 @@
 
 
 // Improvements / To Do
-// implement CheckVTOC level 4 (check block allocation)
 // support Unix v6 inode format (and identify when to use it)
 // support Unix v7 file system format
 // support 2BSD file system format (v7 with 1KB blocks)
@@ -76,8 +75,8 @@ namespace FSX
                 return null;
             }
 
-            Int32 size = CheckVTOC(disk, 3);
-            if (size < 3) return null;
+            Int32 size = CheckVTOC(disk, 4);
+            if (size < 4) return null;
             else if (size != disk.BlockCount) return new Unix(new PaddedDisk(disk, size - disk.BlockCount));
             else return new Unix(disk);
         }
@@ -86,10 +85,11 @@ namespace FSX
         // level 1 - check super-block (and return volume size)
         // level 2 - check directory structure (and return volume size)
         // level 3 - check inode allocation (and return volume size)
+        // level 4 - check block allocation (and return volume size)
         public static Int32 CheckVTOC(Disk disk, Int32 level)
         {
             if (disk == null) throw new ArgumentNullException("disk");
-            if ((level < 0) || (level > 3)) throw new ArgumentOutOfRangeException("level");
+            if ((level < 0) || (level > 4)) throw new ArgumentOutOfRangeException("level");
 
             // level 0 - check basic disk parameters
             if (disk.BlockSize != 512)
@@ -107,15 +107,15 @@ namespace FSX
             if (level == 0) return 0;
 
             // level 1 - check super-block (and return volume size)
-            Block B = disk[1];
-            Int32 isize = B.ToUInt16(0); // number of blocks used for inodes
-            Int32 fsize = B.ToUInt16(2); // file system size (in blocks)
+            Block SB = disk[1]; // super-block
+            Int32 isize = SB.ToUInt16(0); // number of blocks used for inodes
+            Int32 fsize = SB.ToUInt16(2); // file system size (in blocks)
             if (fsize < isize + 2)
             {
                 Program.Debug(1, "I-list size in super-block exceeds volume size ({0:D0} > {1:D0})", isize + 2, fsize);
                 return 0;
             }
-            Int32 p = B.ToInt16(4); // number of blocks in super-block free block list
+            Int32 p = SB.ToInt16(4); // number of blocks in super-block free block list
             if ((p < 1) || (p > 100))
             {
                 Program.Debug(1, "Free block count in super-block invalid (is {0:D0}, expected 1 <= n <= 100)", p);
@@ -123,12 +123,14 @@ namespace FSX
             }
             Int32 n = 2 * p;
             for (Int32 i = 0; i < n; i += 2)
-                if (((p = B.ToUInt16(6 + i)) < isize + 2) || (p >= fsize))
+            {
+                if (((p = SB.ToUInt16(6 + i)) < isize + 2) || (p >= fsize))
                 {
                     Program.Debug(1, "Free block {0:D0} in super-block invalid (is {1:D0}, expected {2:D0} <= n < {3:D0})", i / 2, p, isize + 2, fsize);
                     return 0;
                 }
-            p = B.ToInt16(206); // number of inodes in super-block free inode list
+            }
+            p = SB.ToInt16(206); // number of inodes in super-block free inode list
             if (p > 100)
             {
                 Program.Debug(1, "Free inode count in super-block invalid (is {0:D0}, expected n <= 100)", p);
@@ -136,11 +138,13 @@ namespace FSX
             }
             n = 2 * p;
             for (Int32 i = 0; i < n; i += 2)
-                if (((p = B.ToUInt16(208 + i)) < 1) || (p > isize * 16))
+            {
+                if (((p = SB.ToUInt16(208 + i)) < 1) || (p > isize * 16))
                 {
                     Program.Debug(1, "Free inode {0:D0} in super-block invalid (is {1:D0}, expected 1 <= n <= {2:D0})", i / 2, p, isize * 16);
                     return 0;
                 }
+            }
             if (level == 1) return fsize;
 
             // level 2 - check directory structure (and return volume size)
@@ -150,7 +154,7 @@ namespace FSX
                 Program.Debug(1, "Root directory inode type/used flags invalid (is 0x{0:X4}, expected 0xC000)", iNode.flags & 0xe000);
                 return 1;
             }
-            UInt16[] IMap = new UInt16[isize * 16 + 1]; // inode links seen in directories
+            UInt16[] IMap = new UInt16[isize * 16 + 1]; // inode usage map
             Queue<Int32> DirList = new Queue<Int32>(); // which directories need to be looked at
             DirList.Enqueue((1 << 16) + 1);
             while (DirList.Count != 0)
@@ -169,7 +173,7 @@ namespace FSX
                 Boolean pf = false;
                 for (Int32 bp = 0; bp < data.Length; bp += 16)
                 {
-                    Int32 iNum = BitConverter.ToUInt16(data, bp);
+                    UInt16 iNum = BitConverter.ToUInt16(data, bp);
                     if (iNum == 0) continue;
                     for (p = 2; p < 16; p++) if (data[bp + p] == 0) break;
                     String name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
@@ -222,29 +226,195 @@ namespace FSX
             if (level == 2) return fsize;
 
             // level 3 - check inode allocation (and return volume size)
-            for (Int32 i = 1; i <= isize * 16; i++)
+            for (UInt16 iNum = 1; iNum <= isize * 16; iNum++)
             {
-                iNode = Inode.Get(disk, i);
-                if (((iNode.flags & 0x8000) == 0) && (IMap[i] != 0))
+                iNode = Inode.Get(disk, iNum);
+                if (((iNode.flags & 0x8000) == 0) && (IMap[iNum] != 0))
                 {
-                    Program.Debug(1, "Inode {0:D0} is marked as free, but has {1:D0} link(s)", i, IMap[i]);
+                    Program.Debug(1, "Inode {0:D0} is marked as free, but has {1:D0} link(s)", iNum, IMap[iNum]);
                     return 2;
                 }
-                if (((iNode.flags & 0x8000) != 0) && (IMap[i] == 0))
+                if (((iNode.flags & 0x8000) != 0) && (IMap[iNum] == 0))
                 {
-                    Program.Debug(1, "Inode {0:D0} is marked as allocated, but has no links", i);
+                    Program.Debug(1, "Inode {0:D0} is marked as allocated, but has no links", iNum);
                     return 2;
                 }
-                if (((iNode.flags & 0x8000) != 0) && (IMap[i] != iNode.nlinks))
+                if (((iNode.flags & 0x8000) != 0) && (IMap[iNum] != iNode.nlinks))
                 {
-                    Program.Debug(1, "Inode {0:D0} link count mismatch (is {1:D0}, expected {2:D0})", i, iNode.nlinks, IMap[i]);
+                    Program.Debug(1, "Inode {0:D0} link count mismatch (is {1:D0}, expected {2:D0})", iNum, iNode.nlinks, IMap[iNum]);
+                    return 2;
+                }
+                if (((iNode.flags & 0x1000) == 0) && (iNode.size > 4096))
+                {
+                    Program.Debug(1, "Inode {0:D0} size exceeds limit for small files (is {1:D0}, expected n <= 4096)", iNum, iNode.size);
+                    return 2;
+                }
+                if (((iNode.flags & 0x1000) != 0) && (iNode.size > 1048576))
+                {
+                    Program.Debug(1, "Inode {0:D0} size exceeds limit for large files (is {1:D0}, expected n <= 1048576)", iNum, iNode.size);
                     return 2;
                 }
             }
-            return fsize;
+            // also verify inodes in super-block free list are actually free
+            p = SB.ToInt16(206); // number of inodes in super-block free inode list
+            n = 2 * p;
+            for (Int32 i = 0; i < n; i += 2)
+            {
+                UInt16 iNum = SB.ToUInt16(208 + i);
+                if (IMap[iNum] != 0)
+                {
+                    Program.Debug(1, "Inode {0:D0} is in super-block free list, but has {1:D0} link(s)", iNum, IMap[iNum]);
+                    return 2;
+                }
+            }
+            if (level == 3) return fsize;
 
             // level 4 - check block allocation (and return volume size)
-            // TODO
+            UInt16[] BMap = new UInt16[fsize]; // block usage map
+            for (UInt16 iNum = 1; iNum <= isize * 16; iNum++)
+            {
+                iNode = Inode.Get(disk, iNum);
+                if ((iNode.flags & 0x8000) == 0) continue; // unused inodes should have no allocation
+                if ((iNode.flags & 0x2000) != 0) continue; // device inodes have no allocation
+                n = (iNode.size + 511) / 512; // number of blocks required for file
+                if ((iNode.flags & 0x1000) == 0)
+                {
+                    // inode links to up to 8 direct blocks
+                    for (p = 0; p < n; p++)
+                    {
+                        Int32 b = iNode[p]; // direct block
+                        if (b == 0) continue;
+                        if (b >= fsize)
+                        {
+                            Program.Debug(1, "Block {0:D0} of inode {1:D0} falls outside volume block range (is {2:D0}, expected n < {3:D0})", p, iNum, b, fsize);
+                            return 3;
+                        }
+                        if (b >= disk.BlockCount)
+                        {
+                            Program.Debug(1, "WARNING: Block {0:D0} of inode {1:D0} falls outside disk image block range (is {2:D0}, expected n < {3:D0})", p, iNum, b, disk.BlockCount);
+                        }
+                        if (BMap[b] != 0)
+                        {
+                            Program.Debug(1, "Block {0:D0} is allocated to multiple inodes ({1:D0} and {2:D0})", b, BMap[b], iNum);
+                            return 3;
+                        }
+                        BMap[b] = iNum;
+                    }
+                }
+                else
+                {
+                    // inode links to up to 8 indirect blocks
+                    for (p = 0; p < n; p++)
+                    {
+                        Int32 i = iNode[p / 256]; // indirect block
+                        if (i == 0) continue;
+                        if (i >= fsize)
+                        {
+                            Program.Debug(1, "Indirect block {0:D0} of inode {1:D0} falls outside volume block range (is {2:D0}, expected n < {3:D0})", p / 256, iNum, i, fsize);
+                            return 3;
+                        }
+                        if (i >= disk.BlockCount)
+                        {
+                            Program.Debug(1, "Indirect block {0:D0} of inode {1:D0} falls outside disk image block range (is {2:D0}, expected n < {3:D0})", p / 256, iNum, i, disk.BlockCount);
+                            return 3;
+                        }
+                        Int32 b = disk[i].ToUInt16((p % 256) * 2); // direct block
+                        if (b == 0) continue;
+                        if (b >= fsize)
+                        {
+                            Program.Debug(1, "Block {0:D0} of inode {1:D0} falls outside volume block range (is {2:D0}, expected n < {3:D0})", p, iNum, b, fsize);
+                            return 3;
+                        }
+                        if (b >= disk.BlockCount)
+                        {
+                            Program.Debug(1, "WARNING: Block {0:D0} of inode {1:D0} falls outside disk image block range (is {2:D0}, expected n < {3:D0})", p, iNum, b, disk.BlockCount);
+                        }
+                        if (BMap[b] != 0)
+                        {
+                            Program.Debug(1, "Block {0:D0} is allocated to multiple inodes ({1:D0} and {2:D0})", b, BMap[b], iNum);
+                            return 3;
+                        }
+                        BMap[b] = iNum;
+                    }
+                    for (p = 0; p < n; p += 256)
+                    {
+                        Int32 i = iNode[p / 256]; // indirect block
+                        if (i == 0) continue;
+                        if (BMap[i] != 0)
+                        {
+                            Program.Debug(1, "Block {0:D0} is allocated to multiple inodes ({1:D0} and {2:D0})", i, BMap[i], iNum);
+                            return 3;
+                        }
+                        BMap[i] = iNum;
+                    }
+                }
+            }
+            if (BMap[0] != 0)
+            {
+                Program.Debug(1, "Inode {0:D0} allocates space used by boot block (block 0)", BMap[0]);
+                return 3;
+            }
+            BMap[0] = 1;
+            if (BMap[1] != 0)
+            {
+                Program.Debug(1, "Inode {0:D0} allocates space used by super-block (block 1)", BMap[1]);
+                return 3;
+            }
+            BMap[1] = 1;
+            for (Int32 b = 2; b < isize + 2; b++)
+            {
+                if (BMap[b] != 0)
+                {
+                    Program.Debug(1, "Inode {0:D0} allocates space used by inode storage (block {1:D0})", BMap[b], b);
+                    return 3;
+                }
+                BMap[b] = 1;
+            }
+            // inode details in BMap are no longer needed, mark all used blocks with 1
+            for (Int32 i = 0; i < BMap.Length; i++) if (BMap[i] != 0) BMap[i] = 1;
+            // mark all blocks in free list with 2
+            n = SB.ToInt16(4); // number of blocks in super-block free block list
+            for (Int32 i = 0; i < 2 * n; i += 2)
+            {
+                p = SB.ToUInt16(6 + i);
+                if (p == 0) continue;
+                // TODO: verify p falls within fsize and disk.BlockCount
+                if (BMap[p] != 0)
+                {
+                    Program.Debug(1, "Free block list contains allocated block {0:D0}", p);
+                    return 3;
+                }
+                BMap[p] = 2;
+            }
+            p = SB.ToUInt16(6);
+            while (p != 0)
+            {
+                Block B = disk[p]; // this will fail if p >= disk.BlockCount
+                n = B.ToUInt16(0);
+                for (Int32 i = 0; i < 2 * n; i += 2)
+                {
+                    p = B.ToUInt16(2 + i);
+                    if (p == 0) continue;
+                    // TODO: verify p falls within fsize and disk.BlockCount
+                    if (BMap[p] != 0)
+                    {
+                        Program.Debug(1, "Free block list contains allocated block {0:D0}", p);
+                        return 3;
+                    }
+                    BMap[p] = 2;
+                }
+                p = B.ToUInt16(2);
+            }
+            // unmarked blocks are lost
+            for (Int32 i = 0; i < BMap.Length; i++)
+            {
+                if (BMap[i] == 0)
+                {
+                    Program.Debug(1, "Block {0:D0} not allocated and not in free list", i);
+                    return 3;
+                }
+            }
+            return fsize;
         }
 
         private static Byte[] ReadFile(Disk disk, Inode iNode)
@@ -252,7 +422,7 @@ namespace FSX
             Byte[] buf = new Byte[iNode.size];
             if ((iNode.flags & 0x1000) == 0)
             {
-                // Unix v5/v6 - inode links to 8 direct blocks
+                // Unix v5/v6 - inode links to up to 8 direct blocks
                 for (Int32 p = 0; p < iNode.size; p += 512)
                 {
                     Int32 b = iNode[p / 512]; // direct block
@@ -263,7 +433,7 @@ namespace FSX
             }
             else
             {
-                // Unix v5 - inode links to 8 indirect blocks
+                // Unix v5 - inode links to up to 8 indirect blocks
                 // TODO: handle Unix v6
                 for (Int32 p = 0; p < iNode.size; p += 512)
                 {

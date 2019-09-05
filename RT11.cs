@@ -86,231 +86,170 @@ namespace FSX
 {
     partial class RT11
     {
-        // level 0 - check basic disk parameters
-        // level 1 - check directory length
-        // level 2 - check directory consistency
-        // level 3 - check directory entries (and return volume size)
-        // level 4 - check block allocations (and return volume size)
-        public static Int32 CheckVTOC(Disk disk, Int32 level)
+        public static TestDelegate GetTest()
         {
-            if (disk == null) throw new ArgumentNullException("disk");
-            if ((level < 0) || (level > 4)) throw new ArgumentOutOfRangeException("level");
+            return Test;
+        }
 
-            // level 0 - check basic disk parameters
-            if (disk.BlockSize != 512)
+        // level 0 - check basic disk parameters (return required block size and disk type)
+        // level 1 - check boot block (return disk size and type)
+        // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
+        // level 3 - check directory structure (return volume size and type)
+        // level 4 - check file headers (aka inodes) (return volume size and type)
+        // level 5 - check file header allocation (return volume size and type)
+        // level 6 - check data block allocation (return volume size and type)
+        // note: levels 3 and 4 are reversed because this makes more sense for RT-11 volumes
+        public static Boolean Test(Disk disk, Int32 level, out Int32 size, out Type type)
+        {
+            // level 0 - check basic disk parameters (return required block size and disk type)
+            size = 512;
+            type = typeof(Disk);
+            if (disk == null) return false;
+            if (disk.BlockSize != size) return Program.Debug(false, 1, "RT11.Test: invalid block size (is {0:D0}, require {1:D0})", disk.BlockSize, size);
+            if (level == 0) return true;
+
+            // level 1 - check boot block (return disk size and type)
+            if (level == 1)
             {
-                Program.Debug(1, "Disk block size = {0:D0} (must be 512)", disk.BlockSize);
-                return -1;
+                size = -1;
+                type = typeof(Disk);
+                if (disk.BlockCount < 1) return Program.Debug(false, 1, "RT11.Test: disk too small to contain boot block");
+                return true;
             }
 
-            // ensure disk is at least large enough to contain first directory segment
-            Int32 ds = IsChecksumOK(disk[1], 510) ? disk[1].ToUInt16(0x1d4) : defaultDirStart; // assume directory start at block 6 unless home block value valid
-            if (ds + 1 >= disk.BlockCount)
-            {
-                Program.Debug(1, "Disk image too small to contain directory segment {0:D0}", 1);
-                return -1;
-            }
-            if (level == 0) return 0;
+            // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
+            size = -1;
+            type = null;
+            if (disk.BlockCount < 2) return Program.Debug(false, 1, "RT11.Test: disk too small to contain home block");
+            type = typeof(RT11);
+            if (level == 2) return true;
 
-            // level 1 - check directory length
-            ClusteredDisk dir = new ClusteredDisk(disk, 2, ds - 2, 32); // -2 because segments are numbered from 1
+            // level 3 - check directory structure (return volume size and type)
+            if (disk.BlockCount < 8) return Program.Debug(false, 1, "RT11.Test: disk too small to contain directory segment {0:D0}", 1);
+            ClusteredDisk Dir = new ClusteredDisk(disk, 2, 4, 32); // start at 4 so that segment 1 falls on block 6
+            // check for problems with segment chain structure and count segments in use
             Int32[] SS = new Int32[32]; // segments seen (to detect cycles)
             Int32 sc = 0; // segment count
             Int32 s = 1;
             while (s != 0)
             {
-                if (SS[s] != 0)
-                {
-                    Program.Debug(1, "Invalid directory segment chain: segment {0:D0} repeated", s);
-                    return 0;
-                }
+                if (SS[s] != 0) return Program.Debug(false, 1, "RT11.Test: invalid directory segment chain: segment {0:D0} repeated", s);
                 SS[s] = ++sc;
-                s = dir[s].ToUInt16(2); // next directory segment
-                if (s > 31)
-                {
-                    Program.Debug(1, "Invalid directory segment chain: segment {0:D0} invalid", s);
-                    return 0;
-                }
-                if (s >= dir.BlockCount)
-                {
-                    Program.Debug(1, "Disk image too small to contain directory segment {0:D0}", s);
-                    return 0;
-                }
+                s = Dir[s].ToUInt16(2); // next directory segment
+                if (s > 31) return Program.Debug(false, 1, "RT11.Test: invalid directory segment chain: segment {0:D0} invalid", s);
+                if (s >= Dir.BlockCount) return Program.Debug(false, 1, "RT11.Test: disk too small to contain directory segment {0:D0}", s);
             }
-            if (level == 1) return 1;
-
-            // level 2 - check directory consistency
+            // check directory segment consistency (and calculate volume size)
             Int32 ns = -1; // total directory segments
             Int32 eb = -1; // extra bytes per directory entry
-            Int32 bp = -1; // data block pointer
+            Int32 md = -1; // maximum value of data block pointer
             s = 1;
             while (s != 0)
             {
-                Block seg = dir[s];
-                Int32 n = seg.ToUInt16(0); // total directory segments
+                Block D = Dir[s];
+                Int32 n = D.ToUInt16(0); // total directory segments
                 if ((ns == -1) && (n >= sc) && (n < 32)) ns = n;
-                else if ((s == 1) || ((s != 1) && (n != ns) && (n != 0))) // despite docs, this might be zero in segments other than the first
-                {
-                    Program.Debug(1, "Inconsistent directory segment count in segment {0:D0} (is {1:D0}, expected {2:D0}{3})", s, n, sc, (sc == 31) ? null : " <= n <= 31");
-                    return 1;
-                }
-                n = seg.ToUInt16(4); // highest segment in use
-                if ((s == 1) && (n != sc))
-                {
-                    Program.Debug(1, "Incorrect highest-segment-used pointer in segment {0:D0} (is {1:D0}, expected {2:D0})", s, n, sc);
-                    return 1;
-                }
-                n = seg.ToUInt16(6); // extra bytes per directory entry
+                else if ((s == 1) || ((s != 1) && (n != ns) && (n != 0))) return Program.Debug(false, 1, "RT11.Test: inconsistent directory segment count in segment {0:D0} (is {1:D0}, expect {2:D0}{3})", s, n, sc, (sc == 31) ? null : " <= n <= 31");
+                n = D.ToUInt16(4); // highest segment in use
+                if ((s == 1) && (n != sc)) return Program.Debug(false, 1, "RT11.Test: inconsistent highest-segment-used pointer in segment {0:D0} (is {1:D0}, expect {2:D0})", s, n, sc);
+                n = D.ToUInt16(6); // extra bytes per directory entry
                 if ((eb == -1) && ((n % 2) == 0)) eb = n;
-                else if (n != eb)
-                {
-                    Program.Debug(1, "Inconsistent or invalid extra bytes value in segment {0:D0} (is {1:D0}, expected {2})", s, n, (eb == -1) ? "even number" : eb.ToString("D0"));
-                    return 1;
-                }
-                n = seg.ToUInt16(8); // starting data block for this segment
-                if ((n < ds + ns * 2) || ((n >= disk.BlockCount) && (disk.BlockCount > ds + ns * 2)))
-                {
-                    Program.Debug(1, "Invalid start-of-data pointer in segment {0:D0} (is {1:D0}, expected {2:D0} <= n < {3:D0})", s, n, ds + ns * 2, disk.BlockCount);
-                    return 1;
-                }
-                if (n <= bp)
-                {
-                    Program.Debug(1, "Inconsistent start-of-data pointer in segment {0:D0} (is {1:D0}, expected n > {2:D0})", s, n, bp);
-                    return 1;
-                }
-                bp = n;
+                else if (n != eb) return Program.Debug(false, 1, "RT11.Test: inconsistent or invalid extra bytes value in segment {0:D0} (is {1:D0}, require {2})", s, n, (eb == -1) ? "even number" : eb.ToString("D0"));
+                Int32 bp = D.ToUInt16(8); // starting data block for this segment
+                if (bp < 6 + ns * 2) return Program.Debug(false, 1, "RT11.Test: invalid start-of-data pointer in segment {0:D0} (is {1:D0}, require n >= {2:D0})", s, bp, 6 + ns * 2);
                 Int32 sp = 10;
                 E esw;
-                while (((esw = (E)seg.ToUInt16(sp)) & E.EOS) == 0) // entry status word
+                while (((esw = (E)D.ToUInt16(sp)) & E.EOS) == 0) // entry status word
                 {
-                    if (sp + 14 + eb > 1022)
-                    {
-                        Program.Debug(1, "Missing end-of-segment marker in segment {0:D0}", s);
-                        return 1;
-                    }
-                    sp = sp + 14 + eb;
+                    n = D.ToUInt16(sp + 8); // file length (in blocks)
+                    bp += n;
+                    if (sp + 14 + eb > 1022) return Program.Debug(false, 1, "RT11.Test: missing end-of-segment marker in segment {0:D0}", s);
+                    sp += 14 + eb;
                 }
-                s = seg.ToUInt16(2); // next directory segment
+                if (bp > md) md = bp;
+                s = D.ToUInt16(2); // next directory segment
             }
-            if (level == 2) return 2;
+            size = md;
+            if (level == 3) return true;
 
-            // level 3 - check directory entries (and return volume size)
+            // level 4 - check file headers (aka inodes) (return volume size and type)
             s = 1;
             while (s != 0)
             {
-                Block seg = dir[s];
-                Int32 n = seg.ToUInt16(8); // starting data block for this segment
-                if ((n != bp) && (s != 1))
-                {
-                    Program.Debug(1, "Inconsistent start-of-data pointer in segment {0:D0} (is {1:D0}, expected {2:D0})", s, n, bp);
-                    return 2;
-                }
-                bp = n;
+                Block D = Dir[s];
                 Int32 sp = 10;
                 E esw;
-                while (((esw = (E)seg.ToUInt16(sp)) & E.EOS) == 0) // entry status word
+                while (((esw = (E)D.ToUInt16(sp)) & E.EOS) == 0) // entry status word
                 {
-                    UInt16 w = seg.ToUInt16(sp + 14 + eb);
-                    Boolean lastfile = (((E)w & E.EOS) == E.EOS) && (seg.ToUInt16(2) == 0);
-                    w = seg.ToUInt16(sp + 2); // Radix-50 file name (chars 1-3)
-                    if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY))
-                    {
-                        Program.Debug(1, "Invalid file name in segment {0:D0}", s);
-                        return 2;
-                    }
+                    UInt16 w = D.ToUInt16(sp + 14 + eb);
+                    Boolean lastfile = (((E)w & E.EOS) == E.EOS) && (D.ToUInt16(2) == 0);
+                    w = D.ToUInt16(sp + 2); // Radix-50 file name (chars 1-3)
+                    if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY)) return Program.Debug(false, 1, "RT11.Test: invalid file name in segment {0:D0}", s);
                     String fn1 = Radix50.Convert(w);
-                    w = seg.ToUInt16(sp + 4); // Radix-50 file name (chars 4-6)
-                    if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY))
-                    {
-                        Program.Debug(1, "Invalid file name in segment {0:D0}", s);
-                        return 2;
-                    }
+                    w = D.ToUInt16(sp + 4); // Radix-50 file name (chars 4-6)
+                    if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY)) return Program.Debug(false, 1, "RT11.Test: invalid file name in segment {0:D0}", s);
                     String fn2 = Radix50.Convert(w);
-                    w = seg.ToUInt16(sp + 6); // Radix-50 file type
-                    if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY))
-                    {
-                        Program.Debug(1, "Invalid file name in segment {0:D0}", s);
-                        return 2;
-                    }
+                    w = D.ToUInt16(sp + 6); // Radix-50 file type
+                    if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY)) return Program.Debug(false, 1, "RT11.Test: invalid file name in segment {0:D0}", s);
                     String ext = Radix50.Convert(w);
-                    String fn = String.Concat(fn1.Trim(), fn2.Trim(), ".", ext.Trim());
+                    String fn = String.Concat(fn1, fn2).TrimEnd(' ');
+                    fn = String.Concat(fn, ".", ext.TrimEnd(' '));
                     E e = esw & (E.TENT | E.MPTY | E.PERM);
-                    if ((e != E.TENT) && (e != E.MPTY) && (e != E.PERM))
+                    if ((e != E.TENT) && (e != E.MPTY) && (e != E.PERM)) return Program.Debug(false, 1, "RT11.Test: invalid file type in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
+                    if (((esw & (E.PROT | E.READ)) != 0) && (e != E.PERM)) return Program.Debug(false, 1, "RT11.Test: Protected/ReadOnly flags not valid for non-permanent file in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
+                    w = D.ToUInt16(sp + 12); // creation date
+                    if ((w != 0) && !(lastfile && (esw & E.MPTY) == E.MPTY))
                     {
-                        Program.Debug(1, "Invalid file type in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
-                        return 2;
+                        Int32 y = ((w & 0xc000) >> 9) + (w & 0x001f) + 1972;
+                        Int32 m = (w & 0x3c00) >> 10;
+                        Int32 d = (w & 0x03e0) >> 5;
+                        if ((m < 1) || (m > 12) || (d < 1) || (d > 31) || (y < 1973)) return Program.Debug(false, 1, "RT11.Test: invalid file creation date in segment {0:D0}, file {1}: {2:D4}-{3:D2}-{4:D2}", s, fn, y, m, d);
                     }
-                    if (((esw & (E.PROT | E.READ)) != 0) && (e != E.PERM))
-                    {
-                        Program.Debug(1, "Protected/ReadOnly flags not valid for non-permanent file in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
-                        return 2;
-                    }
-                    n = seg.ToUInt16(sp + 8); // file length (in blocks)
-                    if (((bp += n) > disk.BlockCount) && !(lastfile && (esw & E.MPTY) == E.MPTY))
-                    {
-                        // TODO: reconsider reporting this as an error (maybe just return larger size and let disk be padded out)
-                        Program.Debug(1, "File allocation exceeds disk size in segment {0:D0}, file {1}", s, fn);
-                        return 2;
-                    }
-                    n = seg.ToUInt16(sp + 12); // creation date
-                    if (n != 0)
-                    {
-                        Int32 m = (n >> 10) & 0x000f;
-                        Int32 d = (n >> 5) & 0x001f;
-                        Int32 y = (n >> 14) & 0x0003;
-                        y = 1972 + 32 * y + (n & 0x001f);
-                        if (((m > 12) || (d > 31)) && !(lastfile && (esw & E.MPTY) == E.MPTY))
-                        {
-                            Program.Debug(1, "Invalid file creation date in segment {0:D0}, file {1} ({2:D4}-{3:D2}-{4:D2})", s, fn, y, m, d);
-                            return 1;
-                        }
-                    }
-                    sp = sp + 14 + eb;
+                    sp += 14 + eb;
                 }
-                s = seg.ToUInt16(2); // next directory segment
+                s = D.ToUInt16(2); // next directory segment
             }
-            if (level == 3) return bp;
+            if (level == 4) return true;
 
-            // level 4 - check block allocations (and return volume size)
-            if (bp < disk.BlockCount) bp = disk.BlockCount;
-            BitArray BU = new BitArray(bp); // block usage map
-            for (Int32 i = 0; i < 6; i++) BU[i] = true; // mark boot block, home block and reserved blocks as used
-            for (Int32 i = 0; i < 2 * ns; i++) BU[ds + i] = true; // mark directory segments as used
+            // level 5 - check file header allocation (return volume size and type)
+            // RT-11 volumes don't have anything like file header allocation
+            if (level == 5) return true;
+
+            // level 6 - check data block allocation (return volume size and type)
+            // mark used blocks
+            BitArray BMap = new BitArray(size, false);
+            for (Int32 i = 0; i < 6 + ns * 2; i++) BMap[i] = true;
             s = 1;
             while (s != 0)
             {
-                Block seg = dir[s];
-                bp = seg.ToUInt16(8); // starting data block for this segment
+                Block D = Dir[s];
+                Int32 bp = D.ToUInt16(8); // starting data block for this segment
                 Int32 sp = 10;
                 E esw;
-                while (((esw = (E)seg.ToUInt16(sp)) & E.EOS) == 0) // entry status word
+                while (((esw = (E)D.ToUInt16(sp)) & E.EOS) == 0) // entry status word
                 {
-                    UInt16 w = seg.ToUInt16(sp + 14 + eb);
-                    Boolean lastfile = (((E)w & E.EOS) == E.EOS) && (seg.ToUInt16(2) == 0);
-                    w = seg.ToUInt16(sp + 2); // Radix-50 file name (chars 1-3)
-                    String fn1 = (w < 64000) ? Radix50.Convert(w) : String.Empty;
-                    w = seg.ToUInt16(sp + 4); // Radix-50 file name (chars 4-6)
-                    String fn2 = (w < 64000) ? Radix50.Convert(w) : String.Empty;
-                    w = seg.ToUInt16(sp + 6); // Radix-50 file type
-                    String ext = (w < 64000) ? Radix50.Convert(w) : String.Empty;
-                    String fn = String.Concat(fn1.Trim(), fn2.Trim(), ".", ext.Trim());
-                    Int32 n = seg.ToUInt16(sp + 8); // file length (in blocks)
+                    String fn = String.Concat(Radix50.Convert(D.ToUInt16(sp + 2)), Radix50.Convert(D.ToUInt16(sp + 4))).TrimEnd(' ');
+                    fn = String.Concat(fn, ".", Radix50.Convert(D.ToUInt16(sp + 6)).TrimEnd(' '));
+                    Int32 n = D.ToUInt16(sp + 8); // file length (in blocks)
                     for (Int32 i = 0; i < n; i++)
                     {
-                        if (BU[bp + i])
-                        {
-                            if (lastfile && (esw & E.MPTY) == E.MPTY) Program.Debug(1, "Remaining unused space contains already-allocated block {1:D0}", bp + i);
-                            else Program.Debug(1, "File allocation contains already-allocated block in file {0}, block {1:D0}=[{2:D0}]", fn, i + 1, bp + i);
-                            return 3;
-                        }
-                        BU[bp + i] = true;
+                        if ((bp + i == disk.BlockCount) & ((esw & E.MPTY) == 0)) Program.Debug(1, "RT11.Test: WARNING: blocks {0:D0} and higher of file \"{1}\" fall outside image block range (is {2:D0}, expect n < {3:D0})", bp + i, fn, disk.BlockCount);
+                        if (BMap[bp + i]) return Program.Debug(false, 1, "RT11.Test: block {0:D0} of file \"{1}\" is also allocated to another file", bp + i, fn);
+                        BMap[bp + i] = true;
                     }
                     bp += n;
-                    sp = sp + 14 + eb;
+                    sp += 14 + eb;
                 }
-                s = seg.ToUInt16(2); // next directory segment
+                s = D.ToUInt16(2); // next directory segment
             }
-            return bp;
+            // unmarked blocks are lost
+            for (Int32 i = 0; i < size; i++)
+            {
+                if (!BMap[i]) return Program.Debug(false, 1, "RT11.Test: block {0:D0} is not allocated and not reserved", i);
+            }
+            if (level == 6) return true;
+
+            return false;
         }
 
         private static Boolean IsChecksumOK(Block block, Int32 checksumOffset)
@@ -618,8 +557,10 @@ namespace FSX
             // all other images (including RX50) should be written as logical images
             FileStream f = new FileStream(fileName, FileMode.Create);
             Disk d = mDisk;
-            Int32 n = CheckVTOC(d, 3);
-            if ((n == 494) || (n == 988)) // RX01 and RX02 sizes
+            Int32 size;
+            Type type;
+            if (!Test(d, 3, out size, out type)) return false;
+            if ((size == 494) || (size == 988)) // RX01 and RX02 sizes
             {
                 Boolean iFlag = (d is InterleavedDisk);
                 while (d.BaseDisk != null)
@@ -663,7 +604,7 @@ namespace FSX
                     // physical image must be created
                     Int32 SPB = 512 / d.BlockSize;
                     Int32[,] map = new Int32[76, 26];
-                    for (Int32 lsn = 0; lsn < n * SPB; lsn++)
+                    for (Int32 lsn = 0; lsn < size * SPB; lsn++)
                     {
                         Int32 t = lsn / 26;
                         Int32 s = lsn % 26;
@@ -689,7 +630,7 @@ namespace FSX
             else
             {
                 Byte[] buf = new Byte[512];
-                for (Int32 i = 0; i < n; i++)
+                for (Int32 i = 0; i < size; i++)
                 {
                     d[i].CopyTo(buf, 0);
                     f.Write(buf, 0, 512);

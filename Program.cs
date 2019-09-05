@@ -48,6 +48,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Reflection;
 using System.Text;
 
 namespace FSX
@@ -74,9 +75,10 @@ namespace FSX
 
         static public TextWriter Out = Console.Out;
         static public VDE Vol;
-        static public Int32 Verbose = 0;
+        static public Int32 Verbose = 1;
         static public Int32 DebugLevel = 0;
 
+        static private List<FileSystem.TestDelegate> Tests = new List<FileSystem.TestDelegate>();
         static private Dictionary<String, VDE> VolMap = new Dictionary<String, VDE>(StringComparer.OrdinalIgnoreCase);
 
         static void Main(String[] args)
@@ -130,8 +132,8 @@ namespace FSX
                         Console.Error.WriteLine(@"File System eXchange - a utility to access data stored in disk images");
                         Console.Error.WriteLine(@"Usage: FSX [options]");
                         Console.Error.WriteLine(@"Options:");
-                        Console.Error.WriteLine(@"  -v num - set verbosity level to 'num' (0-9)");
-                        Console.Error.WriteLine(@"  -d num - set debug level to 'num' (0-9)");
+                        Console.Error.WriteLine(@"  -v num - set verbosity level to 'num' (0-9, default=1)");
+                        Console.Error.WriteLine(@"  -d num - set debug level to 'num' (0-9, default=0)");
                         Console.Error.WriteLine(@"  -? - display this message");
                         Console.Error.WriteLine(@"At the 'FSX>' prompt, enter ""help"" for more information.");
                         run = false;
@@ -150,6 +152,9 @@ namespace FSX
             }
             if (!run) return;
 
+            // register file system handlers
+            RegisterTests();
+
             // import host volumes
             MountHostVolumes();
 
@@ -161,11 +166,11 @@ namespace FSX
                 if (!ReadCommand(out cmd, out arg))
                 {
                     Console.Error.WriteLine();
-                    break;
+                    run = false;
                 }
                 else if ((cmd == "exit") || (cmd == "quit"))
                 {
-                    break;
+                    run = false;
                 }
                 else if (cmd == "help")
                 {
@@ -183,10 +188,14 @@ namespace FSX
                 }
                 else if ((cmd == "vols") || (cmd == "volumes"))
                 {
+                    String fmt = (Verbose == 0) ? "{0}:" : "{0}:\t{1}\t{2}"; 
                     foreach (VDE v in VolMap.Values)
                     {
-                        Out.WriteLine("{0}:\t{1}\t{2}", v.Key, v.FS.Type, v.FS.Source);
+                        Out.WriteLine(fmt, v.Key, v.FS.Type, v.FS.Source);
                     }
+                }
+                else if (cmd == "test")
+                {
                 }
                 else if ((cmd == "load") || (cmd == "mount"))
                 {
@@ -290,6 +299,24 @@ namespace FSX
                 else if (cmd != "")
                 {
                     Console.Error.WriteLine("Command not recognized: {0}", cmd);
+                }
+            }
+        }
+
+        static void RegisterTests()
+        {
+            foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                foreach (Type t in a.GetTypes())
+                {
+                    if ((t.IsSubclassOf(typeof(FileSystem))) && (!t.IsAbstract))
+                    {
+                        MethodInfo minfo = t.GetMethod("GetTest");
+                        if (minfo == null) continue;
+                        FileSystem.TestDelegate method = minfo.Invoke(null, null) as FileSystem.TestDelegate;
+                        if (method == null) continue;
+                        if (!Tests.Contains(method)) Tests.Add(method);
+                    }
                 }
             }
         }
@@ -477,7 +504,9 @@ namespace FSX
                 {
                     // RT-11 .ISO image file (e.g. RT11DV10.ISO)
                     LBADisk d = new LBADisk(s, data, 512);
-                    if (RT11.CheckVTOC(d, 2) == 2) return new RT11(d); // RT-11 .ISO special format fails level 3 check
+                    Int32 size;
+                    Type type;
+                    if (RT11.Test(d, 5, out size, out type)) return new RT11(d); // RT-11 .ISO special format fails level 6 check
                 }
                 // TODO: add actual ISO9660 image file support
             }
@@ -486,8 +515,9 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadD64(s, data);
                 if (d != null)
                 {
-                    FileSystem fs = CBMDOS.Try(d);
-                    if (fs != null) return fs;
+                    Int32 size;
+                    Type type;
+                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
                 }
             }
             if (path.EndsWith(".d67", StringComparison.OrdinalIgnoreCase))
@@ -495,8 +525,9 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadD64(s, data);
                 if (d != null)
                 {
-                    FileSystem fs = CBMDOS.Try(d);
-                    if (fs != null) return fs;
+                    Int32 size;
+                    Type type;
+                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
                 }
             }
             if (path.EndsWith(".d80", StringComparison.OrdinalIgnoreCase))
@@ -504,8 +535,9 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadD80(s, data);
                 if (d != null)
                 {
-                    FileSystem fs = CBMDOS.Try(d);
-                    if (fs != null) return fs;
+                    Int32 size;
+                    Type type;
+                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
                 }
             }
             if (path.EndsWith(".d82", StringComparison.OrdinalIgnoreCase))
@@ -513,8 +545,9 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadD82(s, data);
                 if (d != null)
                 {
-                    FileSystem fs = CBMDOS.Try(d);
-                    if (fs != null) return fs;
+                    Int32 size;
+                    Type type;
+                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
                 }
             }
 
@@ -529,8 +562,9 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadD64(source, data);
                 if (d != null)
                 {
-                    FileSystem fs = CBMDOS.Try(d);
-                    if (fs != null) return fs;
+                    Int32 size;
+                    Type type;
+                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
                 }
                 return LoadFS(source, d);
             }
@@ -539,8 +573,9 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadD64(source, data);
                 if (d != null)
                 {
-                    FileSystem fs = CBMDOS.Try(d);
-                    if (fs != null) return fs;
+                    Int32 size;
+                    Type type;
+                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
                 }
                 return LoadFS(source, d);
             }
@@ -549,8 +584,9 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadD64(source, data);
                 if (d != null)
                 {
-                    FileSystem fs = CBMDOS.Try(d);
-                    if (fs != null) return fs;
+                    Int32 size;
+                    Type type;
+                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
                 }
                 return LoadFS(source, d);
             }
@@ -559,8 +595,9 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadD64(source, data);
                 if (d != null)
                 {
-                    FileSystem fs = CBMDOS.Try(d);
-                    if (fs != null) return fs;
+                    Int32 size;
+                    Type type;
+                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
                 }
                 return LoadFS(source, d);
             }
@@ -569,8 +606,9 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadD64(source, data);
                 if (d != null)
                 {
-                    FileSystem fs = CBMDOS.Try(d);
-                    if (fs != null) return fs;
+                    Int32 size;
+                    Type type;
+                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
                 }
                 return LoadFS(source, d);
             }
@@ -579,8 +617,9 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadD64(source, data);
                 if (d != null)
                 {
-                    FileSystem fs = CBMDOS.Try(d);
-                    if (fs != null) return fs;
+                    Int32 size;
+                    Type type;
+                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
                 }
                 return LoadFS(source, d);
             }
@@ -589,8 +628,9 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadD64(source, data);
                 if (d != null)
                 {
-                    FileSystem fs = CBMDOS.Try(d);
-                    if (fs != null) return fs;
+                    Int32 size;
+                    Type type;
+                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
                 }
                 return LoadFS(source, d);
             }
@@ -655,8 +695,9 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadD80(source, data);
                 if (d != null)
                 {
-                    FileSystem fs = CBMDOS.Try(d);
-                    if (fs != null) return fs;
+                    Int32 size;
+                    Type type;
+                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
                 }
                 return LoadFS(source, d);
             }
@@ -665,8 +706,9 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadD82(source, data);
                 if (d != null)
                 {
-                    FileSystem fs = CBMDOS.Try(d);
-                    if (fs != null) return fs;
+                    Int32 size;
+                    Type type;
+                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
                 }
                 return LoadFS(source, d);
             }
@@ -719,10 +761,35 @@ namespace FSX
             fs = TryDEC(image);
             if (fs != null) return fs;
 
-            if (image is CHSDisk) fs = CBMDOS.Try(image as CHSDisk);
-            if (fs != null) return fs;
-
-            return null;
+            Int32 level = 0;
+            Int32 size = image.BlockCount;
+            Type type = null;
+            while (true)
+            {
+                Int32 ct = 0;
+                foreach (FileSystem.TestDelegate d in Tests)
+                {
+                    Int32 s;
+                    Type t;
+                    if (d(image, level, out s, out t))
+                    {
+                        ct++;
+                        if ((level >= 2) && (s != -1)) size = s;
+                        if (level >= 2) type = t;
+                    }
+                }
+                if ((level >= 2) && (ct == 1)) break; // if exactly one level 2+ test passed, choose that type
+                else if (ct == 0) return null; // if no test passed, there's no clear choice
+                else level++; // otherwise increase the level and do another round of tests
+            }
+            if (image.BlockCount != size) image = new PaddedDisk(image, size - image.BlockCount);
+            Type[] sig = new Type[1]; // constructor's type signature
+            sig[0] = image.GetType();
+            ConstructorInfo cinfo = type.GetConstructor(sig);
+            if (cinfo == null) return null;
+            Object[] args = new Object[1]; // constructor's arguments
+            args[0] = image;
+            return cinfo.Invoke(args) as FileSystem;
         }
 
         static FileSystem TryDEC(Disk disk)
@@ -801,16 +868,16 @@ namespace FSX
             }
 
             // check disk structure
-            Int32 size = ODS1.CheckVTOC(disk, 3);
-            if (size >= 3)
+            Int32 size;
+            Type type;
+            if (ODS1.Test(disk, 6, out size, out type))
             {
-                if (size != disk.BlockCount) return new ODS1(new PaddedDisk(disk, size - disk.BlockCount));
+                if ((size != -1) && (size != disk.BlockCount)) return new ODS1(new PaddedDisk(disk, size - disk.BlockCount));
                 return new ODS1(disk);
             }
-            size = RT11.CheckVTOC(disk, 3);
-            if (size >= 3)
+            if (RT11.Test(disk, 6, out size, out type))
             {
-                if (size != disk.BlockCount) return new RT11(new PaddedDisk(disk, size - disk.BlockCount));
+                if ((size != -1) && (size != disk.BlockCount)) return new RT11(new PaddedDisk(disk, size - disk.BlockCount));
                 return new RT11(disk);
             }
             return null;
@@ -1129,8 +1196,13 @@ namespace FSX
 
         static public void Debug(Int32 messageLevel, String format, params Object[] args)
         {
-            if (DebugLevel < messageLevel) return;
-            Console.Error.WriteLine(format, args);
+            if (DebugLevel >= messageLevel) Console.Error.WriteLine(format, args);
+        }
+
+        static public Boolean Debug(Boolean returnValue, Int32 messageLevel, String format, params Object[] args)
+        {
+            Debug(messageLevel, format, args);
+            return returnValue;
         }
     }
 }

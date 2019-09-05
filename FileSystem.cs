@@ -20,6 +20,36 @@
 // SOFTWARE.
 
 
+// To facilitate accessing disks whose file system type is unknown, each FileSystem
+// may implement a test method that can be used to check for the presence of on-disk
+// data structures in increasing levels of detail, until the file system type and size
+// can be reliably inferred.  Each FileSystem that supports this should implement a
+// GetTest() function that returns a 'TestDelegate'.  When the program needs to
+// identify a file system type, it will invoke TestDelegate as needed.
+//
+// To enable comparison of Test results, the levels should be defined as follows:
+//  0 - check basic disk parameters (return required block size and disk type)
+//  1 - check boot block (return disk size and type)
+//  2 - check volume descriptor (aka home/super block) (return volume size and type)
+//  3 - check file headers (aka inodes) (return volume size and type)
+//  4 - check directory structure (return volume size and type)
+//  5 - check file header allocation (return volume size and type)
+//  6 - check data block allocation (return volume size and type)
+//
+// Each test method should return true if the requirements for the given level (and
+// all lower levels) are met by the disk, or false otherwise.  For level 0, each test
+// method also specifies via 'out' parameters the block size and disk type required
+// (e.g. Commodore disks must have 256-byte blocks and be track/sector addressable).
+// For level 1, each test method specifies the disk size and disk type required, and
+// for levels 2 and higher they specify the volume size and volume type that would
+// be most suitable.  For level 1, a size of -1 means that no specific disk size can
+// be determined, which is not uncommon for images of disks whose sizes were fixed by
+// the hardware, or stored on the disk controller rather than on the disk itself.
+// For levels 2 and higher a size of -1 means the size can't be determined without
+// examining the disk image at a higher level (e.g. the RT-11 home block doesn't
+// include the volume size, so a level 3 check is required).
+
+
 // Future Improvements / To Do
 // eliminate DumpDir (merge functionality into DumpFile)
 
@@ -32,6 +62,8 @@ namespace FSX
 {
     abstract class FileSystem
     {
+        public delegate Boolean TestDelegate(Disk disk, Int32 level, out Int32 size, out Type type);
+
         public abstract Disk Disk { get; }                                                      // disk where volume is loaded from
         public abstract String Source { get; }                                                  // source where volume is loaded from
         public abstract String Type { get; }                                                    // type of file system on this volume
@@ -43,7 +75,7 @@ namespace FSX
         public abstract void DumpDir(String fileSpec, TextWriter output);                       // dump directory contents
         public abstract void ListFile(String fileSpec, Encoding encoding, TextWriter output);   // list file contents
         public abstract void DumpFile(String fileSpec, TextWriter output);                      // dump file contents
-        public abstract String FullName(String fileSpec);                                       // check if file exists
+        public abstract String FullName(String fileSpec);                                       // canonical name (if file exists)
         public abstract Byte[] ReadFile(String fileSpec);                                       // read a file 
         public abstract Boolean SaveFS(String fileName, String format);                         // write file system image to file
     }

@@ -114,112 +114,81 @@ namespace FSX
 {
     partial class ODS1
     {
-        // level 0 - check basic disk parameters
-        // level 1 - check home block
-        // level 2 - check index file 1,1,0
-        // level 3 - check storage bitmap file 2,2,0 (and return volume size)
-        public static Int32 CheckVTOC(Disk disk, Int32 level)
+        public static TestDelegate GetTest()
+        {
+            return Test;
+        }
+
+        // level 0 - check basic disk parameters (return required block size and disk type)
+        // level 1 - check boot block (return disk size and type)
+        // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
+        // level 3 - check file headers (aka inodes) (return volume size and type)
+        // level 4 - check directory structure (return volume size and type)
+        // level 5 - check file header allocation (return volume size and type)
+        // level 6 - check data block allocation (return volume size and type)
+        public static Boolean Test(Disk disk, Int32 level, out Int32 size, out Type type)
         {
             if (disk == null) throw new ArgumentNullException("disk");
-            if ((level < 0) || (level > 3)) throw new ArgumentOutOfRangeException("level");
 
-            // level 0 - check basic disk parameters
-            if (disk.BlockSize != 512)
+            // level 0 - check basic disk parameters (return required block size and disk type)
+            size = 512;
+            type = typeof(Disk);
+            if (disk == null) return false;
+            if (disk.BlockSize != size) return Program.Debug(false, 1, "ODS1.Test: invalid block size (is {0:D0}, require {1:D0})", disk.BlockSize, size);
+            if (level == 0) return true;
+
+            // level 1 - check boot block (return disk size and type)
+            if (level == 1)
             {
-                Program.Debug(1, "Disk block size = {0:D0} (must be 512)", disk.BlockSize);
-                return -1;
+                size = -1;
+                type = typeof(Disk);
+                if (disk.BlockCount < 1) return Program.Debug(false, 1, "ODS1.Test: disk too small to contain boot block");
+                return true;
             }
 
-            // ensure disk is at least large enough to contain home block
-            if (disk.BlockCount < 2)
-            {
-                Program.Debug(1, "Disk image too small to contain home block");
-                return -1;
-            }
-            if (level == 0) return 0;
-
-            // level 1 - check home block
+            // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
+            size = -1;
+            type = null;
+            if (disk.BlockCount < 2) return Program.Debug(false, 1, "ODS1.Test: disk too small to contain home block");
             Block HB = disk[1];
-            if (!IsChecksumOK(HB, 58))
-            {
-                Program.Debug(1, "Home Block First Checksum invalid");
-                return 0;
-            }
-            if (!IsChecksumOK(HB, 510))
-            {
-                Program.Debug(1, "Home Block Second Checksum invalid");
-                return 0;
-            }
+            if (!IsChecksumOK(HB, 58)) return Program.Debug(false, 1, "ODS1.Test: home block first checksum invalid");
+            if (!IsChecksumOK(HB, 510)) return Program.Debug(false, 1, "ODS1.Test: home block second checksum invalid");
             Int32 FMAX = HB.ToUInt16(6); // H.FMAX
-            if (FMAX < 16)
-            {
-                Program.Debug(1, "Home Block Maximum Number of Files invalid (is {0:D0}, expected n >= 16)", FMAX);
-                return 0;
-            }
+            if (FMAX < 16) return Program.Debug(false, 1, "ODS1.Test: home block maximum number of files invalid (is {0:D0}, require n >= 16)", FMAX);
             Int32 n = (FMAX + 4095) / 4096;
-            Int32 l = HB.ToUInt16(0);
+            Int32 l = HB.ToUInt16(0); // H.IBSZ, index file bitmap size
             Int32 fLim = l * 4096; // file limit (based on current data structure sizes; FMAX may be higher)
             if (fLim > FMAX) fLim = FMAX;
-            if ((l < 1) || (l > n))
-            {
-                Program.Debug(1, "Home Block Index File Bitmap Size invalid (is {0:D0}, expected 1 <= n <= {1:D0})", l, n);
-                return 0;
-            }
-            n = (HB.ToUInt16(2) << 16) + HB.ToUInt16(4);
-            if ((n <= 1) || (n >= disk.BlockCount - l - 16))
-            {
-                Program.Debug(1, "Home Block Index File Bitmap LBN invalid (is {0:D0}, expected 1 < n < {1:D0})", n, disk.BlockCount - l - 16);
-                return 0;
-            }
-            if (HB.ToUInt16(8) != 1)
-            {
-                Program.Debug(1, "Home Block Storage Bitmap Cluster Factor invalid (must be 1)");
-                return 0;
-            }
-            if (HB.ToUInt16(10) != 0)
-            {
-                Program.Debug(1, "Home Block Disk Device Type invalid (must be 0)");
-                return 0;
-            }
+            if ((l < 1) || (l > n)) return Program.Debug(false, 1, "ODS1.Test: home block index file bitmap size invalid (is {0:D0}, require 1 <= n <= {1:D0})", l, n);
+            n = (HB.ToUInt16(2) << 16) + HB.ToUInt16(4); // HB.IBLB - index file bitmap LBN
+            if ((n <= 1) || (n >= disk.BlockCount - l - 16)) return Program.Debug(false, 1, "ODS1.Test: home block index file bitmap LBN invalid (is {0:D0}, require 1 < n < {1:D0})", n, disk.BlockCount - l - 16);
+            if (HB.ToUInt16(8) != 1) return Program.Debug(false, 1, "ODS1.Test: home block storage bitmap cluster factor invalid (must be 1)");
+            if (HB.ToUInt16(10) != 0) return Program.Debug(false, 1, "ODS1.Test: home block disk device type invalid (must be 0)");
             n = HB.ToUInt16(12);
-            if ((n != 0x0101) && (n != 0x0102))
-            {
-                Program.Debug(1, "Home Block Volume Structure Level invalid (must be 0x0101 or 0x0102)");
-                return 0;
-            }
-            if (level == 1) return 1;
+            if ((n != 0x0101) && (n != 0x0102)) return Program.Debug(false, 1, "ODS1.Test: home block volume structure level invalid (must be 0x0101 or 0x0102)");
+            type = typeof(ODS1);
+            if (level == 2) return true;
 
-            // level 2 - check index file 1,1,0
-            UInt16[] HA = new UInt16[fLim + 1]; // file header allocation
-            HA[1] = 1;
+            // level 3 - check file headers (aka inodes) (return volume size and type)
+            // check index file 1,1,0
+            UInt16[] HMap = new UInt16[fLim + 1]; // file header allocation
+            HMap[1] = 1;
             Block H = GetFileHeader(disk, 1); // index file header
-            if (!IsChecksumOK(H, 510))
-            {
-                Program.Debug(1, "Index File Header Checksum invalid");
-                return 1;
-            }
-            n = H.ToUInt16(2);
-            l = H.ToUInt16(4);
-            if ((n != 1) || (l != 1))
-            {
-                Program.Debug(1, "Index File File Number invalid (is {0:D0},{1:D0}, expected 1,1)", n, l);
-                return 1;
-            }
-            n = H.ToUInt16(6);
-            if (n != 0x0101)
-            {
-                Program.Debug(1, "Index File Structure Level invalid (is 0x{0:x4}, expected 0x0101)", n);
-                return 1;
-            }
+            if (!IsChecksumOK(H, 510)) return Program.Debug(false, 1, "ODS1.Test: index file header checksum invalid");
+            n = H.ToUInt16(2); // H.FNUM
+            l = H.ToUInt16(4); // H.FSEQ
+            if ((n != 1) || (l != 1)) return Program.Debug(false, 1, "ODS1.Test: index file file number invalid (is {0:D0},{1:D0}, expect 1,1)", n, l);
+            n = H.ToUInt16(6); // H.FLEV
+            if (n != 0x0101) return Program.Debug(false, 1, "ODS1.Test: index file structure level invalid (is 0x{0:x4}, expect 0x0101)", n);
             // TODO: check File Ident Area fields (e.g. file name, file type)
             n = 0; // calculated size of index file (based on map area retrieval pointers)
             while (H != null)
             {
-                Int32 map = H[1] * 2; // map area offset
-                Int32 CTSZ = H[map + 6];
-                Int32 LBSZ = H[map + 7];
+                Int32 map = H[1] * 2; // H.MPOF - map area offset
+                Int32 CTSZ = H[map + 6]; // M.CTSZ
+                Int32 LBSZ = H[map + 7]; // M.LBSZ
                 Int32 p = map + 10; // start of retrieval pointers
-                Int32 q = p + H[map + 8] * 2; // end of retrieval pointers
+                Int32 q = p + H[map + 8] * 2; // add M.USE words to find end of retrieval pointers
                 Int32 ct;
                 Int32 lbn;
                 while (p < q)
@@ -243,78 +212,41 @@ namespace FSX
                     }
                     else // unknown format
                     {
-                        Program.Debug(1, "Index File Map Area Count/LBN Field Size invalid (is {0:D0},{1:D0}, expected 1,3 or 2,2 or 2,4)", CTSZ, LBSZ);
-                        return 1;
+                        return Program.Debug(false, 1, "ODS1.Test: index file map area count/LBN field size invalid (is {0:D0},{1:D0}, require 1,3 or 2,2 or 2,4)", CTSZ, LBSZ);
                     }
-                    ct++;
-                    // below checks should be done as part of block allocation check (after disk size has been confirmed)
-                    //if (lbn < 2)
-                    //{
-                    //    Program.Debug(1, "Index File Map Retrieval Start Pointer invalid (is {0:D0}, expected n >= 2)", lbn);
-                    //    return 1;
-                    //}
-                    //if ((lbn + ct) >= disk.BlockCount)
-                    //{
-                    //    Program.Debug(1, "Index File Map Retrieval End Pointer invalid (is {0:D0}, expected n < {1:D0})", lbn + ct, disk.BlockCount);
-                    //    return 1;
-                    //}
-                    n += ct;
+                    if (lbn + ct >= disk.BlockCount) return Program.Debug(false, 1, "ODS1.Test: index file map retrieval end pointer invalid (is {0:D0}, expect n < {1:D0})", lbn + ct, disk.BlockCount);
+                    n += ct + 1;
                 }
-                UInt16 w = H[map + 2];
-                if (w > fLim)
-                {
-                    Program.Debug(1, "Index File Extension chain invalid, header {0:D0} is outside home block limit (expected n <= {1:D0})", w, fLim);
-                    return 1;
-                }
-                if (HA[w] != 0)
-                {
-                    Program.Debug(1, "Index File Extension chain invalid, header {0:D0} already used by file {1:D0}", w, HA[w]);
-                    return 1;
-                }
-                if (w != 0) HA[w] = 1;
+                UInt16 w = H[map + 2]; // M.EFNU - extension file number
+                if (w > fLim) return Program.Debug(false, 1, "ODS1.Test: index file extension chain invalid, header {0:D0} is outside home block limit (expect n <= {1:D0})", w, fLim);
+                if (w > n) return Program.Debug(false, 1, "ODS1.Test: index file extension chain invalid, header {0:D0} exceeds retrieval range of previous headers (expect n <= {1:D0}", w, n);
+                if (HMap[w] != 0) return Program.Debug(false, 1, "ODS1.Test: index file extension chain invalid, header {0:D0} already used by file {1:D0}", w, HMap[w]);
+                if (w != 0) HMap[w] = 1;
                 H = GetFileHeader(disk, w);
             }
-            l = 2 + HB.ToUInt16(0); // number of Index File blocks not occupied by file headers
-            if ((n < l + 16) || (n > l + fLim))
-            {
-                Program.Debug(1, "Index File block map length invalid (is {0:D0}, expected {1:D0} <= n <= {1:D0})", n, l + 16, l + fLim);
-                return 1;
-            }
+            l = 2 + HB.ToUInt16(0); // number of index file blocks not occupied by file headers
+            if ((n < l + 16) || (n > l + fLim)) return Program.Debug(false, 1, "ODS1.Test: index file block map length invalid (is {0:D0}, expect {1:D0} <= n <= {1:D0})", n, l + 16, l + fLim);
             n -= l; // number of file headers currently in Index File
             if (n < fLim) fLim = n; // adjust file limit down to fit current Index File size
-            if (level == 2) return 2;
-
-            // level 3 - check storage bitmap file 2,2,0 (and return volume size)
-            if (HA[2] != 0)
-            {
-                Program.Debug(1, "Storage Bitmap File header conflict, header 2 already used by file {0:D0}", HA[2]);
-                return 2;
-            }
-            HA[2] = 2;
+            // check storage bitmap file 2,2,0
+            if (HMap[2] != 0) return Program.Debug(false, 1, "ODS1.Test: storage bitmap file header conflict, header 2 already used by file {0:D0}", HMap[2]);
+            HMap[2] = 2;
             H = GetFileHeader(disk, 2); // storage bitmap file header
-            n = H.ToUInt16(2);
-            l = H.ToUInt16(4);
-            if ((n != 2) || (l != 2))
-            {
-                Program.Debug(1, "Storage Bitmap File File Number invalid (is {0:D0},{1:D0}, expected 2,2)", n, l);
-                return 2;
-            }
-            n = H.ToUInt16(6);
-            if (n != 0x0101)
-            {
-                Program.Debug(1, "Storage Bitmap File Structure Level invalid (is 0x{0:x4}, expected 0x0101)", n);
-                return 2;
-            }
+            n = H.ToUInt16(2); // H.FNUM
+            l = H.ToUInt16(4); // H.FSEQ
+            if ((n != 2) || (l != 2)) return Program.Debug(false, 1, "ODS1.Test: storage bitmap file file number invalid (is {0:D0},{1:D0}, expect 2,2)", n, l);
+            n = H.ToUInt16(6); // H.FLEV
+            if (n != 0x0101) return Program.Debug(false, 1, "ODS1.Test: storage bitmap file structure level invalid (is 0x{0:x4}, expect 0x0101)", n);
             // TODO: check File Ident Area fields (e.g. file name, file type)
             n = 0; // calculated size of storage bitmap file (based on map area retrieval pointers)
             Int32 bLim = -1;
             while (H != null)
             {
-                Int32 map = H[1] * 2; // map area offset
-                Int32 CTSZ = H[map + 6];
-                Int32 LBSZ = H[map + 7];
+                Int32 map = H[1] * 2; // H.MPOF - map area offset
+                Int32 CTSZ = H[map + 6]; // M.CTSZ
+                Int32 LBSZ = H[map + 7]; // M.LBSZ
                 Int32 p = map + 10; // start of retrieval pointers
-                Int32 q = p + H[map + 8] * 2; // end of retrieval pointers
+                Int32 q = p + H[map + 8] * 2; // add M.USE words to find end of retrieval pointers
                 Int32 ct;
                 Int32 lbn;
                 while (p < q)
@@ -338,60 +270,43 @@ namespace FSX
                     }
                     else // unknown format
                     {
-                        Program.Debug(1, "Storage Bitmap File Map Area Count/LBN Field Size invalid (is {0:D0},{1:D0}, expected 1,3 or 2,2 or 2,4)", CTSZ, LBSZ);
-                        return 2;
+                        return Program.Debug(false, 1, "ODS1.Test: storage bitmap file map area count/LBN field size invalid (is {0:D0},{1:D0}, require 1,3 or 2,2 or 2,4)", CTSZ, LBSZ);
                     }
-                    ct++;
-                    // below checks should be done as part of block allocation check (after disk size has been confirmed)
-                    //if (lbn < 2)
-                    //{
-                    //    Program.Debug(1, "Storage Bitmap File Map Retrieval Start Pointer invalid (is {0:D0}, expected n >= 2)", lbn);
-                    //    return 2;
-                    //}
-                    //if ((lbn + ct) >= disk.BlockCount)
-                    //{
-                    //    Program.Debug(1, "Storage Bitmap File Map Retrieval End Pointer invalid (is {0:D0}, expected n < {1:D0})", lbn + ct, disk.BlockCount);
-                    //    return 2;
-                    //}
-                    n += ct;
-                    if (bLim == -1)
+                    if (lbn < 2) return Program.Debug(false, 1, "ODS1.Test: storage bitmap file map retrieval start pointer invalid (is {0:D0}, expect n >= 2)", lbn);
+                    if (lbn + ct >= disk.BlockCount) return Program.Debug(false, 1, "ODS1.Test: storage bitmap file map retrieval end pointer invalid (is {0:D0}, expect n < {1:D0})", lbn + ct, disk.BlockCount);
+                    n += ct + 1;
+                    if (bLim == -1) // this must be the first extent, so look at the storage control block while we're here
                     {
                         Block B = disk[lbn];
-                        l = 4 + B[3] * 4;
+                        l = 4 + B[3] * 4; // offset of size dword
                         bLim = (B.ToUInt16(l) << 16) + B.ToUInt16(l + 2); // size of unit in blocks from Storage Control Block
                         l = (bLim + 4095) / 4096; // number of storage bitmap blocks needed
-                        if (l != B[3])
-                        {
-                            Program.Debug(1, "Storage Bitmap size inconsistent with volume size (bitmap capacity {0:D0}, volume size {1:D0}", B[3] * 4096, bLim);
-                            return 2;
-                        }
+                        if (l != B[3]) return Program.Debug(false, 1, "ODS1.Test: storage bitmap size inconsistent with volume size (bitmap capacity {0:D0}, volume size {1:D0}", B[3] * 4096, bLim);
                     }
                 }
-                UInt16 w = H[map + 2];
-                if (w > fLim)
-                {
-                    Program.Debug(1, "Storage Bitmap File Extension chain invalid, header {0:D0} is outside index file limit (expected n <= {1:D0})", w, fLim);
-                    return 2;
-                }
-                if (HA[w] != 0)
-                {
-                    Program.Debug(1, "Storage Bitmap File Extension chain invalid, header {0:D0} already used by file {1:D0}", w, HA[w]);
-                    return 2;
-                }
-                if (w != 0) HA[w] = 2;
+                UInt16 w = H[map + 2]; // M.EFNU
+                if (w > fLim) return Program.Debug(false, 1, "ODS1.Test: storage bitmap file extension chain invalid, header {0:D0} is outside index file limit (expect n <= {1:D0})", w, fLim);
+                if (HMap[w] != 0) return Program.Debug(false, 1, "ODS1.Test: storage bitmap file extension chain invalid, header {0:D0} already used by file {1:D0}", w, HMap[w]);
+                if (w != 0) HMap[w] = 2;
                 H = GetFileHeader(disk, w);
             }
-            if (n != l + 1)
-            {
-                Program.Debug(1, "Storage Bitmap File block map length invalid (is {0:D0}, expected {1:D0})", n, l + 1);
-                return 2;
-            }
-            return bLim;
+            if (n != l + 1) return Program.Debug(false, 1, "ODS1.Test: storage bitmap file block map length invalid (is {0:D0}, expect {1:D0})", n, l + 1);
+            size = bLim;
+            if (level == 3) return true;
 
-            // level 4 - check file headers (and return volume size)
-            // like checking the index file 1,1, except for filenums >2
+            // level 4 - check directory structure (return volume size and type)
+            // TODO
+            if (level == 4) return true;
 
-            // level 5 - check block allocation (and return volume size)
+            // level 5 - check file header allocation (return volume size and type)
+            // TODO
+            if (level == 5) return true;
+
+            // level 6 - check data block allocation (return volume size and type)
+            // TODO
+            if (level == 6) return true;
+
+            return false;
         }
 
         private static Boolean IsChecksumOK(Block block, Int32 checksumOffset)
@@ -994,8 +909,10 @@ namespace FSX
             // all other images (including RX50) should be written as logical images
             FileStream f = new FileStream(fileName, FileMode.Create);
             Disk d = mDisk;
-            Int32 n = CheckVTOC(d, 3);
-            if ((n == 494) || (n == 988)) // RX01 and RX02 sizes
+            Int32 size;
+            Type type;
+            if (!Test(d, 3, out size, out type)) return false;
+            if ((size == 494) || (size == 988)) // RX01 and RX02 sizes
             {
                 Boolean iFlag = (d is InterleavedDisk);
                 while (d.BaseDisk != null)
@@ -1039,7 +956,7 @@ namespace FSX
                     // physical image must be created
                     Int32 SPB = 512 / d.BlockSize;
                     Int32[,] map = new Int32[76, 26];
-                    for (Int32 lsn = 0; lsn < n * SPB; lsn++)
+                    for (Int32 lsn = 0; lsn < size * SPB; lsn++)
                     {
                         Int32 t = lsn / 26;
                         Int32 s = lsn % 26;
@@ -1065,7 +982,7 @@ namespace FSX
             else
             {
                 Byte[] buf = new Byte[512];
-                for (Int32 i = 0; i < n; i++)
+                for (Int32 i = 0; i < size; i++)
                 {
                     d[i].CopyTo(buf, 0);
                     f.Write(buf, 0, 512);

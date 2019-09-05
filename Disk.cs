@@ -73,11 +73,12 @@ namespace FSX
     class Sector : Block
     {
         private Byte[] mData;
-        private Int32 mID;
+        private Int32 mID;      // range: 0-2147483647
         private Int32 mErr;
 
         public Sector(Int32 id, Byte[] data, Int32 index, Int32 count)
         {
+            if (id < 0) throw new ArgumentOutOfRangeException("id");
             mID = id;
             mData = new Byte[count];
             for (Int32 i = 0; i < count; i++) mData[i] = data[index++];
@@ -85,12 +86,14 @@ namespace FSX
 
         public Sector(Int32 id, Int32 size)
         {
+            if (id < 0) throw new ArgumentOutOfRangeException("id");
             mID = id;
             mData = new Byte[size];
         }
 
         public Sector(Int32 id, Int32 size, Byte value)
         {
+            if (id < 0) throw new ArgumentOutOfRangeException("id");
             mID = id;
             mData = new Byte[size];
             for (Int32 i = 0; i < size; i++) mData[i] = value;
@@ -160,6 +163,55 @@ namespace FSX
             UInt16 n = BitConverter.ToUInt16(mData, startIndex);
             startIndex += 2;
             return n;
+        }
+    }
+
+    class Track
+    {
+        private Sector[] mData;
+        private Int32 mMinID = -1;
+        private Int32 mMaxID = -1;
+
+        public Track(Int32 length)
+        {
+            mData = new Sector[length];
+        }
+
+        public Int32 Length
+        {
+            get { return mData.Length; }
+        }
+
+        public Int32 MinSector
+        {
+            get { return mMinID; }
+        }
+
+        public Int32 MaxSector
+        {
+            get { return mMaxID; }
+        }
+
+        public Sector this[Int32 id]
+        {
+            get
+            {
+                for (Int32 i = 0; i < mData.Length; i++) if (mData[i].ID == id) return mData[i];
+                return null;
+            }
+        }
+
+        internal Sector Get(Int32 index)
+        {
+            return mData[index];
+        }
+
+        internal void Set(Int32 index, Sector value)
+        {
+            mData[index] = value;
+            Int32 id = value.ID;
+            if ((mMinID == -1) || (id < mMinID)) mMinID = id;
+            if (id > mMaxID) mMaxID = id;
         }
     }
 
@@ -280,55 +332,6 @@ namespace FSX
 
     partial class CHSDisk : Disk
     {
-        public class Track
-        {
-            private Sector[] mData;
-            private Int32 mMinID = -1;
-            private Int32 mMaxID = -1;
-
-            public Track(Int32 length)
-            {
-                mData = new Sector[length];
-            }
-
-            public Int32 Length
-            {
-                get { return mData.Length; }
-            }
-
-            public Int32 MinSector
-            {
-                get { return mMinID; }
-            }
-
-            public Int32 MaxSector
-            {
-                get { return mMaxID; }
-            }
-
-            public Sector this[Int32 id]
-            {
-                get
-                {
-                    for (Int32 i = 0; i < mData.Length; i++) if (mData[i].ID == id) return mData[i];
-                    return null;
-                }
-            }
-
-            internal Sector Get(Int32 index)
-            {
-                return mData[index];
-            }
-
-            internal void Set(Int32 index, Sector value)
-            {
-                mData[index] = value;
-                Int32 id = value.ID;
-                if ((mMinID == -1) || (id < mMinID)) mMinID = id;
-                if (id > mMaxID) mMaxID = id;
-            }
-        }
-
         private String mSource;
         private Int32 mBlockSize;
         private Int32 mBlockCount;
@@ -796,7 +799,8 @@ namespace FSX
             mBPC = blocksPerCluster;
             mStart = startBlock;
             mBlockSize = disk.BlockSize * blocksPerCluster;
-            mBlockCount = clusterCount;
+            mBlockCount = (disk.BlockCount - startBlock) / blocksPerCluster;
+            if (clusterCount < mBlockCount) mBlockCount = clusterCount;
             mSource = String.Format("{0} [C={1:D0}x{2:D0}@{3:D0}]", disk.Source, blocksPerCluster, mBlockCount, startBlock);
             mCache = new Cluster[mBlockCount];
         }

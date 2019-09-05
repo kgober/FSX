@@ -59,217 +59,164 @@ namespace FSX
 {
     partial class CBMDOS
     {
-        public static FileSystem Try(CHSDisk disk)
+        public static TestDelegate GetTest()
         {
-            Program.Debug(1, "CBMDOS.Try: {0}", disk.Source);
-
-            if (CheckVTOC(disk, 2) < 2) return null;
-            else return new CBMDOS(disk);
+            return Test;
         }
 
-        // level 0 - check basic disk parameters
-        // level 1 - check directory length
-        // level 2 - check directory consistency
-        public static Int32 CheckVTOC(CHSDisk disk, Int32 level)
+        // level 0 - check basic disk parameters (return required block size and disk type)
+        // level 1 - check boot block (return disk size and type)
+        // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
+        // level 3 - check directory structure (return volume size and type)
+        // level 4 - check file headers (aka inodes) (return volume size and type)
+        // level 5 - check file header allocation (return volume size and type)
+        // level 6 - check data block allocation (return volume size and type)
+        // note: levels 3 and 4 are reversed because this makes more sense for CBMDOS volumes
+        public static Boolean Test(Disk dsk, Int32 level, out Int32 size, out Type type)
         {
-            if (disk == null) throw new ArgumentNullException("disk");
-            if ((level < 0) || (level > 2)) throw new ArgumentOutOfRangeException("level");
+            // level 0 - check basic disk parameters (return required block size and disk type)
+            size = 256;
+            type = typeof(CHSDisk);
+            if (dsk == null) return false;
+            if (!(dsk is CHSDisk)) return Program.Debug(false, 1, "CBMDOS.Test: disk must be track-oriented (e.g. 'CHSDisk')");
+            CHSDisk disk = dsk as CHSDisk;
+            if (disk.BlockSize != size) return Program.Debug(false, 1, "CBMDOS.Test: invalid block size (is {0:D0}, require {1:D0})", disk.BlockSize, size);
+            if (disk.MinHead != disk.MaxHead) return Program.Debug(false, 1, "CBMDOS.Test: disk must be logically single-sided");
+            if (disk.MinCylinder < 1) return Program.Debug(false, 1, "CBMDOS.Test: disk track numbering must start at 1 (is {0:D0})", disk.MinCylinder);
+            if (disk.MinSector() != 0) return Program.Debug(false, 1, "CBMDOS.Test: disk sector numbering must start at 0 (is {0:D0})", disk.MinSector());
+            if (level == 0) return true;
 
-            // level 0 - check basic disk parameters
-            if (disk.BlockSize != 256)
+            // level 1 - check boot block (return disk size and type)
+            if (level == 1)
             {
-                Program.Debug(1, "Disk block size = {0:D0} (must be 256)", disk.BlockSize);
-                return -1;
+                size = -1;
+                type = typeof(CHSDisk);
+                return true;
             }
-            if (disk.MinHead != disk.MaxHead)
-            {
-                Program.Debug(1, "Disk must be logically single-sided");
-                return -1;
-            }
-            if (disk.MinCylinder < 1)
-            {
-                Program.Debug(1, "Disk track numbering must start at 1 (is {0:D0})", disk.MinCylinder);
-                return -1;
-            }
-            if (disk.MinSector() != 0)
-            {
-                Program.Debug(1, "Disk sector numbering must start at 0 (is {0:D0})", disk.MinSector());
-                return -1;
-            }
-            if (disk.MaxCylinder < 18)
-            {
-                Program.Debug(1, "Disk too small to contain directory track");
-                return -1;
-            }
-            if ((disk.MaxCylinder <= 42) && (disk.MinCylinder > 18))
-            {
-                Program.Debug(1, "Disk too small to contain directory track 18");
-                return -1;
-            }
-            if ((disk.MaxCylinder > 42) && (disk.MinCylinder > 39))
-            {
-                Program.Debug(1, "Disk too small to contain directory track 39");
-                return -1;
-            }
-            Int32 ms = -1;
-            for (Int32 i = disk.MinCylinder; i <= disk.MaxCylinder; i++) if (disk[i, 0].Length > ms) ms = disk[i, 0].Length;
-            if (level == 0) return 0;
 
-            // level 1 - check directory length
-            Int32[,] SS = new Int32[disk.MaxCylinder + 1, ms + 1];
-            Int32 sc = 0; // segment count
+            // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
+            size = -1;
+            type = null;
             Int32 t = (disk.MaxCylinder <= 42) ? 18 : 39;
             Int32 s = 0;
-            while (t != 0)
-            {
-                if ((t < disk.MinCylinder) || (t > disk.MaxCylinder))
-                {
-                    Program.Debug(1, "Invalid directory segment {0:D0}/{1:D0}: track not present", t, s);
-                    return 0;
-                }
-                if ((s < disk[t, 0].MinSector) || (s > disk[t, 0].MaxSector))
-                {
-                    Program.Debug(1, "Invalid directory segment {0:D0}/{1:D0}: sector not present", t, s);
-                    return 0;
-                }
-                if (SS[t, s] != 0)
-                {
-                    Program.Debug(1, "Invalid directory segment chain: segment {0:D0}/{1:D0} repeated", t, s);
-                    return 0;
-                }
-                SS[t, s] = ++sc;
-                Block B = disk[t, 0, s];
-                t = B[0];
-                s = B[1];
-            }
-            if (level == 1) return 1;
+            Track T = GetTrack(disk, t);
+            if (T == null) return Program.Debug(false, 1, "CBMDOS.Test: disk image does not include directory track {0:D0}", t);
+            Block B = T[s];
+            if (B == null) return Program.Debug(false, 1, "CBMDOS.Test: disk image does not include directory header block {0:D0}/{1:D0}", t, s);
+            Byte fmt = B[2];
+            if ((fmt != 0x01) && (fmt != 0x41) && (fmt != 0x43)) return Program.Debug(false, 1, "CBMDOS.Test: BAM format byte invalid (is 0x{0:x2}, expect 0x01, 0x41, or 0x43)", fmt);
+            if ((t == 18) && (T.Length == 20) && (fmt != 0x01)) return Program.Debug(false, 1, "CBMDOS.Test: BAM format byte incorrect (is 0x{0:x2}, expect 0x01)", fmt);
+            if ((t == 18) && (T.Length == 19) && (fmt != 0x41)) return Program.Debug(false, 1, "CBMDOS.Test: BAM format byte incorrect (is 0x{0:x2}, expect 0x41)", fmt);
+            if ((t == 18) && (fmt == 0x43)) return Program.Debug(false, 1, "CBMDOS.Test: BAM format byte incorrect (is 0x43, expect 0x01 or 0x41)");
+            if ((t == 39) && (fmt != 0x43)) return Program.Debug(false, 1, "CBMDOS.Test: BAM format byte incorrect (is 0x{0:x2}, expect 0x43)", fmt);
+            size = (fmt == 0x01) ? 690 : (fmt == 0x41) ? 683 : (disk.MaxCylinder <= 77) ? 2083 : 4166;
+            type = typeof(CBMDOS);
+            if (level == 2) return true;
 
-            // level 2 - check directory consistency
-            t = (disk.MaxCylinder <= 42) ? 18 : 39;
-            s = 0;
-            Int32 ver = -1;
-            Int32 bc = -1; // blocks preceding first directory block
-            Int32 bt = 1; // expected start track in next BAM block
+            // level 3 - check directory structure (return volume size and type)
+            Int32 dc = (fmt != 0x43) ? 1 : (disk.MaxCylinder <= 77) ? 3 : 5; // number of blocks that precede first directory block
+            Int32 bc = (fmt != 0x43) ? 0 : 1; // number of blocks that precede first BAM block
+            if ((fmt == 0x01) && (B[165] != 0xa0)) return Program.Debug(false, 1, "CBMDOS.Test: directory header version byte invalid (is 0x{0:x2}, expect 0xa0 ' ')", B[165]);
+            if ((fmt == 0x01) && (B[166] != 0xa0)) return Program.Debug(false, 1, "CBMDOS.Test: directory header format byte invalid (is 0x{0:x2}, expect 0xa0 ' ')", B[166]);
+            if ((fmt == 0x41) && (B[165] != 0x32)) return Program.Debug(false, 1, "CBMDOS.Test: directory header version byte invalid (is 0x{0:x2}, expect 0x32 '2')", B[165]);
+            if ((fmt == 0x41) && (B[166] != 0x41)) return Program.Debug(false, 1, "CBMDOS.Test: directory header format byte invalid (is 0x{0:x2}, expect 0x41 'A')", B[166]);
+            if ((fmt == 0x43) && (B[27] != 0x32)) return Program.Debug(false, 1, "CBMDOS.Test: directory header version byte invalid (is 0x{0:x2}, expect 0x32 '2')", B[27]);
+            if ((fmt == 0x43) && (B[28] != 0x43)) return Program.Debug(false, 1, "CBMDOS.Test: directory header format byte invalid (is 0x{0:x2}, expect 0x43 'C')", B[28]);
+            Int32 maxSect = -1;
+            for (Int32 i = disk.MinCylinder; i <= disk.MaxCylinder; i++)
+            {
+                T = GetTrack(disk, i);
+                if ((T != null) && (T.MaxSector > maxSect)) maxSect = T.MaxSector;
+            }
+            Int32[,] BMap = new Int32[disk.MaxCylinder + 1, maxSect + 1];
+            Int32 sc = 0; // sector count within directory chain
+            Int32 st = 1; // starting track expected in next BAM block (DOS 2.5 / 2.7 only)
             while (t != 0)
             {
-                Block B = disk[t, 0, s];
+                sc++;
+                T = GetTrack(disk, t);
+                if (T == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid directory chain at segment {0:D0}: track not found for {1:D0}/{2:D0}", sc, t, s);
+                B = T[s];
+                if (B == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid directory chain at segment {0:D0}: sector not found for {1:D0}/{2:D0}", sc, t, s);
+                if (BMap[t, s] != 0) return Program.Debug(false, 1, "CBMDOS.Test: invalid directory chain at segment {0:D0}: cycle detected at {1:D0}/{2:D0}", sc, t, s);
+                BMap[t, s] = sc;
                 Int32 l = (B[0] == 0) ? B[1] + 1 : B.Size;
-                Boolean f = false;
-                if (ver == -1)
+                if (dc > 0)
                 {
-                    ver = B[2];
-                    if (ver == 1)
+                    dc--;
+                    if (bc > 0) // directory header block
                     {
-                        bc = 1; // BAM/Header 
-                        if ((B[165] != 160) || (B[166] != 160)) // 2 shifted spaces
-                        {
-                            Program.Debug(1, "Unrecognized DOS version/format in directory header (expected 0x2020, was 0x{0:X2}{1:X2})", B[165], B[166]);
-                            return 1;
-                        }
+                        bc--;
                     }
-                    else if (ver == 65)
+                    else // this is a BAM block
                     {
-                        bc = 1; // BAM/Header
-                        if ((B[165] != 50) || (B[166] != 65)) // "2A"
+                        if (B[2] != fmt) return Program.Debug(false, 1, "CBMDOS.Test: invalid directory chain at segment {0:D0}: BAM format byte invalid at {1:D0}/{2:D0} (is 0x{3:x2}, expect 0x{4:x2})", sc, t, s, B[2], fmt);
+                        if (fmt == 0x43) // track start/limit only present in DOS 2.5 / 2.7
                         {
-                            Program.Debug(1, "Unrecognized DOS version/format in directory header (expected 0x3241 \"2A\", was 0x{0:X2}{1:X2})", B[165], B[166]);
-                            return 1;
-                        }
-                    }
-                    else if (ver == 67)
-                    {
-                        f = true;
-                        bc = (disk.MaxCylinder > 77) ? 5 : 3; // Header block and 2 or 4 BAM blocks
-                        if ((B[27] != 50) || (B[28] != 67)) // "2C"
-                        {
-                            Program.Debug(1, "Unrecognized DOS version/format in directory header (expected 0x3243 \"2C\", was 0x{0:X2}{1:X2})", B[27], B[28]);
-                            return 1;
-                        }
-                    }
-                    else
-                    {
-                        Program.Debug(1, "Unrecognized BAM format {0:D0} (expected 1, 65, or 67)", ver);
-                        return 1;
-                    }
-                }
-                if (bc > 0)
-                {
-                    bc--;
-                    if (!f)
-                    {
-                        // this is a BAM block
-                        if (B[2] != ver)
-                        {
-                            Program.Debug(1, "BAM format mismatch in {0:D0}/{1:D0} (is {2:D0}, expected {3:D0})", t, s, B[2], ver);
-                            return 1;
-                        }
-                        if (ver == 67) // track start/limit only present in DOS 2.5 / 2.7
-                        {
-                            if (B[4] != bt)
-                            {
-                                Program.Debug(1, "BAM coverage error in {0:D0}/{1:D0} (start track is {2:D0}, expected {3:D0})", t, s, B[4], bt);
-                                return 1;
-                            }
-                            if (B[5] <= bt)
-                            {
-                                Program.Debug(1, "BAM coverage error in {0:D0}/{1:D0} (limit track is {2:D0}, expected n > {3:D0})", t, s, B[5], bt);
-                                return 1;
-                            }
-                            bt = B[5];
+                            if (B[4] != st) return Program.Debug(false, 1, "CBMDOS.Test: BAM coverage error at {0:D0}/{1:D0}: start track invalid (is {2:D0}, expect {3:D0})", t, s, B[4], st);
+                            if (B[5] <= st) return Program.Debug(false, 1, "CBMDOS.Test: BAM coverage error at {0:D0}/{1:D0}: limit track invalid (is {2:D0}, expect n > {3:D0})", t, s, B[5], st);
+                            st = B[5];
                         }
                     }
                 }
-                else
+                if ((B[0] == 0) && (fmt == 0x43) && (st != disk.MaxCylinder + 1)) return Program.Debug(false, 1, "CBMDOS.Test: BAM coverage error at {0:D0}/{1:D0}: limit track invalid (is {2:D0}, expect {3:D0})", t, s, st, disk.MaxCylinder + 1);
+                t = B[0];
+                s = B[1];
+            }
+            if (level == 3) return true;
+
+            // level 4 - check file headers (aka inodes) (return volume size and type)
+            Int32 fc = 0;
+            t = (disk.MaxCylinder <= 42) ? 18 : 39;
+            s = 1;
+            while (t != 0)
+            {
+                B = GetTrack(disk, t)[s];
+                Int32 l = (B[0] == 0) ? B[1] + 1 : B.Size;
+                for (Int32 bp = 2; bp < level; bp += 32)
                 {
-                    // this is a directory block
-                    for (Int32 bp = 2; bp < l; bp += 32)
-                    {
-                        Byte b = B[bp]; // file type
-                        if (b == 0) continue; // directory entry not in use
-                        Boolean fClosed = ((b & 0x80) != 0);
-                        Boolean fLocked = ((b & 0x40) != 0);
-                        Boolean fSaveAt = ((b & 0x20) != 0);
-                        Int32 fType = b & 0x1f;
-                        if (fType > 4)
-                        {
-                            Program.Debug(1, "Illegal file type in directory entry 0x{0:X2} of {1:D0}/{2:D0} (is {3:D0}, expected 0 <= n <= 4)", bp, t, s, fType);
-                            return 1;
-                        }
-                        Int32 ft = B[bp + 1]; // track of first block
-                        if ((ft < disk.MinCylinder) || (ft > disk.MaxCylinder))
-                        {
-                            Program.Debug(1, "Illegal start track in directory entry 0x{0:X2} of {1:D0}/{2:D0} (is {3:D0}, expected {4:D0} <= n <= {5:D0})", bp, t, s, ft, disk.MinCylinder, disk.MaxCylinder);
-                            return 1;
-                        }
-                        Int32 fs = B[bp + 2]; // sector of first block
-                        if ((fs < disk.MinSector(ft, 0)) || (fs > disk.MaxSector(ft, 0)))
-                        {
-                            Program.Debug(1, "Illegal start sector in directory entry 0x{0:X2} of {1:D0}/{2:D0} (is {3:D0}, expected {4:D0} <= n <= {5:D0})", bp, t, s, fs, disk.MinSector(ft, 0), disk.MaxSector(ft, 0));
-                            return 1;
-                        }
-                        Int32 n = B.ToUInt16(bp + 28); // file block count
-                        if (n > (disk.BlockCount - sc))
-                        {
-                            Program.Debug(1, "Illegal block count in directory entry 0x{0:X2} of {1:D0}/{2:D0} (is {3:D0}, expected 0 <= n <= {4:D0})", bp, t, s, n, disk.BlockCount - sc);
-                            return 1;
-                        }
-                    }
-                }
-                if ((B[0] == 0) && (ver == 67) && (bt != disk.MaxCylinder + 1))
-                {
-                    Program.Debug(1, "BAM coverage error in {0:D0}/{1:D0} (limit track is {2:D0}, expected {3:D0})", t, s, bt, disk.MaxCylinder + 1);
-                    return 1;
+                    fc += 65536;
+                    sc = 0;
+                    Byte b = B[bp]; // file type
+                    if (b == 0) continue; // directory entry not in use
+                    Boolean fClosed = ((b & 0x80) != 0);
+                    Boolean fLocked = ((b & 0x40) != 0);
+                    Boolean fSaveAt = ((b & 0x20) != 0);
+                    Int32 fType = b & 0x1f;
+                    if (fType > 4) return Program.Debug(false, 1, "CBMDOS.Test: invalid file type in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, require 0 <= n <= 4)", t, s, bp, fType);
+                    Int32 ft = B[bp + 1]; // track of first block
+                    if ((T = GetTrack(disk, ft)) == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid start track in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0} <= n <= {5:D0})", t, s, bp, ft, disk.MinCylinder, disk.MaxCylinder);
+                    Int32 fs = B[bp + 2];
+                    if (T[fs] == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid start sector in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0} <= n <= {5:D0})", t, s, bp, fs, T.MinSector, T.MaxSector);
+                    Int32 n = B.ToUInt16(bp + 28); // file block count
+                    if (n > (size - sc)) return Program.Debug(false, 1, "CBMDOS.Test: invalid block count in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect n <= {4:D0})", t, s, bp, n, size - sc);
+                    // file size in directory matches number of blocks in data block chain
+                    // error if file blocks impossible (i.e. not within volume)
+                    // warning if file blocks not valid (i.e. not present in disk image)
+                    // file data block chains contain no cycles
                 }
                 t = B[0];
                 s = B[1];
             }
-            return 2;
+            if (level == 4) return true;
 
-            // level 3 - check directory entries
-            // TODO
+            // level 5 - check file header allocation (return volume size and type)
+            if (level == 5) return true;
 
-            // level 4 - check block allocations
-            // TODO
+            // level 6 - check data block allocation (return volume size and type)
+            // blocks allocated to at most one file
+            // free/used blocks correctly recorded in BAM
+            // error if free blocks impossible (i.e. not within volume)
+            if (level == 6) return true;
+
+            return false;
+        }
+
+        private static Track GetTrack(CHSDisk disk, Int32 track)
+        {
+            if (track < disk.MinCylinder) return null;
+            if (track > disk.MaxCylinder) return null;
+            return disk[track, disk.MinHead];
         }
 
         // convert a CBMDOS wildcard pattern to a Regex

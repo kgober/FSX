@@ -44,6 +44,8 @@
 
 
 // Improvements / To Do
+// in ListDir, handle directory paths not ending in '/'
+// in ListDir, show file dates
 // support Unix v6 inode format (and identify when to use it)
 // support Unix v7 file system format
 // support 2BSD file system format (v7 with 1KB blocks)
@@ -59,11 +61,293 @@ using System.Text.RegularExpressions;
 
 namespace FSX
 {
-    partial class Unix
+    partial class Unix : FileSystem
+    {
+        private class Inode
+        {
+            public Int32 iNum;
+            public UInt16 flags;
+            public Byte nlinks;
+            public Byte uid;
+            public Byte gid;
+            public Int32 size;
+            public UInt16[] addr;
+            // 2 words for actime
+            // 2 words for modtime
+
+            public Inode(Int32 iNumber)
+            {
+                iNum = iNumber;
+            }
+
+            public UInt16 this[Int32 index]
+            {
+                get { return addr[index]; }
+            }
+
+            public static Inode Get(Disk disk, Int32 iNum)
+            {
+                Int32 block = 2 + (iNum - 1) / 16;
+                Int32 offset = ((iNum - 1) % 16) * 32;
+                return Get(disk[block], offset, iNum);
+            }
+
+            public static Inode Get(Block block, Int32 offset, Int32 iNum)
+            {
+                Inode I = new Inode(iNum);
+                I.flags = block.ToUInt16(ref offset);
+                I.nlinks = block.ToByte(ref offset);
+                I.uid = block.ToByte(ref offset);
+                I.gid = block.ToByte(ref offset);
+                I.size = block.ToByte(ref offset) << 16;
+                I.size += block.ToUInt16(ref offset);
+                I.addr = new UInt16[8];
+                for (Int32 i = 0; i < 8; i++) I.addr[i] = block.ToUInt16(ref offset);
+                return I;
+            }
+        }
+
+        private Disk mDisk;
+        private String mType;
+        private Int32 mRoot;
+        private Inode mDirNode;
+        private String mDir;
+
+        public Unix(Disk disk)
+        {
+            mDisk = disk;
+            mType = "Unix";
+            mRoot = 1;
+            mDirNode = Inode.Get(disk, 1);
+            mDir = "/";
+        }
+
+        public override Disk Disk
+        {
+            get { return mDisk; }
+        }
+
+        public override String Source
+        {
+            get { return mDisk.Source; }
+        }
+
+        public override String Type
+        {
+            get { return mType; }
+        }
+
+        public override String Dir
+        {
+            get { return mDir; }
+        }
+
+        public override Encoding DefaultEncoding
+        {
+            get { return Encoding.ASCII; }
+        }
+
+        public override void ChangeDir(String dirSpec)
+        {
+            Inode dirNode;
+            String dirName;
+            if (!FindFile(mDirNode, mDir, dirSpec, out dirNode, out dirName))
+            {
+                Console.Error.WriteLine("Not found: {0}", dirSpec);
+                return;
+            }
+            if ((dirNode.flags & 0x6000) != 0x4000)
+            {
+                Console.Error.WriteLine("Not a directory: {0}", dirName);
+                return;
+            }
+            mDirNode = dirNode;
+            mDir = dirName;
+        }
+
+        public override void ListDir(String fileSpec, TextWriter output)
+        {
+            if ((fileSpec == null) || (fileSpec.Length == 0)) fileSpec = "*";
+
+            Inode dirNode = mDirNode;
+            String name;
+            Int32 p = fileSpec.LastIndexOf('/');
+            if (p != -1)
+            {
+                if ((!FindFile(mDirNode, mDir, fileSpec.Substring(0, p), out dirNode, out name)) || ((dirNode.flags & 0x6000) != 0x4000))
+                {
+                    Console.Error.WriteLine("Not found: {0}", fileSpec);
+                    return;
+                }
+                fileSpec = fileSpec.Substring(p + 1);
+                if (fileSpec.Length == 0) fileSpec = "*";
+            }
+            // TODO: handle directory paths not ending in '/' such as "dev" or "/usr/source"
+
+            // count number of blocks used
+            Int32 n = 0;
+            Regex RE = Regex(fileSpec);
+            Byte[] data = ReadFile(mDisk, dirNode);
+            for (Int32 bp = 0; bp < data.Length; bp += 16)
+            {
+                Int32 iNum = BitConverter.ToUInt16(data, bp);
+                if (iNum == 0) continue;
+                for (p = 2; p < 16; p++) if (data[bp + p] == 0) break;
+                name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
+                if (!RE.IsMatch(name)) continue;
+                Inode iNode = Inode.Get(mDisk, iNum);
+                n += (iNode.size + 511) / 512;
+            }
+
+            // show directory listing
+            output.WriteLine("total {0:D0}", n);
+            for (Int32 bp = 0; bp < data.Length; bp += 16)
+            {
+                Int32 iNum = BitConverter.ToUInt16(data, bp);
+                if (iNum == 0) continue;
+                for (p = 2; p < 16; p++) if (data[bp + p] == 0) break;
+                name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
+                if (!RE.IsMatch(name)) continue;
+                Inode iNode = Inode.Get(mDisk, iNum);
+                p = (iNode.flags & 0x6000) >> 13;
+                Char ft = (p == 0) ? '-' : (p == 2) ? 'd' : (p == 1) ? 'c' : 'b';
+                String op = Perm((iNode.flags & 0x01c0) >> 6, iNode.flags & 0x0800);
+                String gp = Perm((iNode.flags & 0x0038) >> 3, iNode.flags & 0x0400);
+                String wp = Perm(iNode.flags & 0x0007, 0);
+                // TODO: show file date
+                switch (ft)
+                {
+                    case '-':
+                    case 'd':
+                        output.WriteLine("{0,5:D0} {1}{2}{3}{4} {5,2:D0} {6,-5} {7,7:D0} {8,-14}", iNum, ft, op, gp, wp, iNode.nlinks, iNode.uid.ToString(), iNode.size, name);
+                        break;
+                    case 'b':
+                    case 'c':
+                        output.WriteLine("{0,5:D0} {1}{2}{3}{4} {5,2:D0} {6,-5} {7,3:D0},{8,3:D0} {9,-14}", iNum, ft, op, gp, wp, iNode.nlinks, iNode.uid.ToString(), iNode[0] >> 8, iNode[0] & 0x00ff, name);
+                        break;
+                }
+            }
+        }
+
+        private String Perm(Int32 permBits, Int32 isSUID)
+        {
+            Char[] C = new Char[3];
+            C[0] = ((permBits & 4) == 0) ? '-' : 'r';
+            C[1] = ((permBits & 2) == 0) ? '-' : 'w';
+            C[2] = ((permBits & 1) == 0) ? '-' : 'x';
+            if (isSUID != 0) C[2] = 's';
+            return new String(C);
+        }
+
+        public override void DumpDir(String fileSpec, TextWriter output)
+        {
+            ListDir(fileSpec, output);
+        }
+
+        public override void ListFile(String fileSpec, Encoding encoding, TextWriter output)
+        {
+            Inode iNode;
+            String name;
+            if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return;
+            String buf = encoding.GetString(ReadFile(mDisk, iNode));
+            Int32 p = 0;
+            for (Int32 i = 0; i < buf.Length; i++)
+            {
+                if (buf[i] != '\n') continue;
+                output.WriteLine(buf.Substring(p, i - p));
+                p = i + 1;
+            }
+        }
+
+        public override void DumpFile(String fileSpec, TextWriter output)
+        {
+            Inode iNode;
+            String name;
+            if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return;
+            Program.Dump(null, ReadFile(mDisk, iNode), output, 16, 512, Program.DumpOptions.ASCII);
+        }
+
+        public override String FullName(String fileSpec)
+        {
+            Inode iNode;
+            String name;
+            if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return null;
+            return name;
+        }
+
+        public override Byte[] ReadFile(String fileSpec)
+        {
+            Inode iNode;
+            String name;
+            if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return new Byte[0];
+            return ReadFile(mDisk, iNode);
+        }
+
+        public override Boolean SaveFS(String fileName, String format)
+        {
+            throw new NotImplementedException();
+        }
+
+        private Boolean FindFile(Inode dirNode, String dirName, String pathSpec, out Inode iNode, out String pathName)
+        {
+            iNode = null;
+            pathName = null;
+            if ((pathSpec == null) || (pathSpec.Length == 0)) return false;
+
+            // start at root directory for absolute paths
+            if (pathSpec[0] == '/')
+            {
+                dirNode = Inode.Get(mDisk, mRoot);
+                dirName = "/";
+                while ((pathSpec.Length != 0) && (pathSpec[0] == '/')) pathSpec = pathSpec.Substring(1);
+            }
+
+            // find directory containing file
+            Int32 p;
+            while ((p = pathSpec.IndexOf('/')) != -1)
+            {
+                String name;
+                if (!FindFile(dirNode, dirName, pathSpec.Substring(0, p), out iNode, out name)) return false;
+                if ((iNode.flags & 0x6000) != 0x4000) return false; // all path prefix components must be dirs
+                dirNode = iNode;
+                dirName = String.Concat(dirName, name, "/");
+                pathSpec = pathSpec.Substring(p + 1);
+                while ((pathSpec.Length != 0) && (pathSpec[0] == '/')) pathSpec = pathSpec.Substring(1);
+            }
+
+            // if no file component, the last directory found is what we're looking for
+            if (pathSpec.Length == 0)
+            {
+                iNode = dirNode;
+                pathName = dirName;
+                return true;
+            }
+
+            // find the file in the final directory
+            Regex RE = Regex(pathSpec);
+            Byte[] data = ReadFile(mDisk, dirNode);
+            for (Int32 bp = 0; bp < data.Length; bp += 16)
+            {
+                Int32 iNum = BitConverter.ToUInt16(data, bp);
+                if (iNum == 0) continue;
+                for (p = 2; p < 16; p++) if (data[bp + p] == 0) break;
+                String name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
+                if (RE.IsMatch(name))
+                {
+                    iNode = Inode.Get(mDisk, iNum);
+                    pathName = String.Concat(dirName, name, ((iNode.flags & 0x6000) == 0x4000) ? "/" : null);
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    partial class Unix : IFileSystemGetTest
     {
         public static TestDelegate GetTest()
         {
-            return Test;
+            return Unix.Test;
         }
 
         // level 0 - check basic disk parameters (return required block size and disk type)
@@ -286,28 +570,10 @@ namespace FSX
 
             return false;
         }
+    }
 
-        public static FileSystem Try(Disk disk)
-        {
-            Program.Debug(1, "Unix.Try: {0}", disk.Source);
-
-            if ((disk.BlockSize != 512) && ((512 % disk.BlockSize) == 0))
-            {
-                return Try(new ClusteredDisk(disk, 512 / disk.BlockSize, 0));
-            }
-            else if (disk.BlockSize != 512)
-            {
-                Program.Debug(1, "Volume block size = {0:D0} (must be 512)", disk.BlockSize);
-                return null;
-            }
-
-            Int32 size;
-            Type type;
-            if (!Test(disk, 6, out size, out type)) return null;
-            if (size != disk.BlockCount) return new Unix(new PaddedDisk(disk, size - disk.BlockCount));
-            return new Unix(disk);
-        }
-
+    partial class Unix
+    {
         private static Byte[] ReadFile(Disk disk, Inode iNode)
         {
             Byte[] buf = new Byte[iNode.size];
@@ -349,289 +615,6 @@ namespace FSX
             p = String.Concat("^", p, "$");
             Program.Debug(2, "Regex: {0} => {1}", pattern, p);
             return new Regex(p);
-        }
-    }
-
-    partial class Unix : FileSystem
-    {
-        private class Inode
-        {
-            public Int32 iNum;
-            public UInt16 flags;
-            public Byte nlinks;
-            public Byte uid;
-            public Byte gid;
-            public Int32 size;
-            public UInt16[] addr;
-            // 2 words for actime
-            // 2 words for modtime
-
-            public Inode(Int32 iNumber)
-            {
-                iNum = iNumber;
-            }
-
-            public UInt16 this[Int32 index]
-            {
-                get { return addr[index]; }
-            }
-
-            public static Inode Get(Disk disk, Int32 iNum)
-            {
-                Int32 block = 2 + (iNum - 1) / 16;
-                Int32 offset = ((iNum - 1) % 16) * 32;
-                return Get(disk[block], offset, iNum);
-            }
-
-            public static Inode Get(Block block, Int32 offset, Int32 iNum)
-            {
-                Inode I = new Inode(iNum);
-                I.flags = block.ToUInt16(ref offset);
-                I.nlinks = block.ToByte(ref offset);
-                I.uid = block.ToByte(ref offset);
-                I.gid = block.ToByte(ref offset);
-                I.size = block.ToByte(ref offset) << 16;
-                I.size += block.ToUInt16(ref offset);
-                I.addr = new UInt16[8];
-                for (Int32 i = 0; i < 8; i++) I.addr[i] = block.ToUInt16(ref offset);
-                return I;
-            }
-        }
-
-        private Disk mDisk;
-        private String mType;
-        private Int32 mRoot;
-        private Inode mDirNode;
-        private String mDir;
-
-        public Unix(Disk disk)
-        {
-            mDisk = disk;
-            mType = "Unix";
-            mRoot = 1;
-            mDirNode = Inode.Get(disk, 1);
-            mDir = "/";
-        }
-
-        public override Disk Disk
-        {
-            get { return mDisk; }
-        }
-
-        public override String Source
-        {
-            get { return mDisk.Source; }
-        }
-
-        public override String Type
-        {
-            get { return mType; }
-        }
-
-        public override String Dir
-        {
-            get { return mDir; }
-        }
-
-        public override Encoding DefaultEncoding
-        {
-            get { return Encoding.ASCII; }
-        }
-
-        public override void ChangeDir(String dirSpec)
-        {
-            Inode dirNode;
-            String dirName;
-            if (!FindFile(mDirNode, mDir, dirSpec, out dirNode, out dirName))
-            {
-                Console.Error.WriteLine("Not found: {0}", dirSpec);
-                return;
-            }
-            if ((dirNode.flags & 0x6000) != 0x4000)
-            {
-                Console.Error.WriteLine("Not a directory: {0}", dirName);
-                return;
-            }
-            mDirNode = dirNode;
-            mDir = dirName;
-        }
-
-        public override void ListDir(String fileSpec, TextWriter output)
-        {
-            if ((fileSpec == null) || (fileSpec.Length == 0)) fileSpec = "*";
-
-            Inode dirNode = mDirNode;
-            String name;
-            Int32 p = fileSpec.LastIndexOf('/');
-            if (p != -1)
-            {
-                if ((!FindFile(mDirNode, mDir, fileSpec.Substring(0, p), out dirNode, out name)) || ((dirNode.flags & 0x6000) != 0x4000))
-                {
-                    Console.Error.WriteLine("Not found: {0}", fileSpec);
-                    return;
-                }
-                fileSpec = fileSpec.Substring(p + 1);
-                if (fileSpec.Length == 0) fileSpec = "*";
-            }
-            // TODO: handle directory paths not ending in '/' such as "dev" or "/usr/source"
-            //
-
-            // count number of blocks used
-            Int32 n = 0;
-            Regex RE = Regex(fileSpec);
-            Byte[] data = ReadFile(mDisk, dirNode);
-            for (Int32 bp = 0; bp < data.Length; bp += 16)
-            {
-                Int32 iNum = BitConverter.ToUInt16(data, bp);
-                if (iNum == 0) continue;
-                for (p = 2; p < 16; p++) if (data[bp + p] == 0) break;
-                name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
-                if (!RE.IsMatch(name)) continue;
-                Inode iNode = Inode.Get(mDisk, iNum);
-                n += (iNode.size + 511) / 512;
-            }
-
-            // show directory listing
-            output.WriteLine("total {0:D0}", n);
-            for (Int32 bp = 0; bp < data.Length; bp += 16)
-            {
-                Int32 iNum = BitConverter.ToUInt16(data, bp);
-                if (iNum == 0) continue;
-                for (p = 2; p < 16; p++) if (data[bp + p] == 0) break;
-                name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
-                if (!RE.IsMatch(name)) continue;
-                Inode iNode = Inode.Get(mDisk, iNum);
-                p = (iNode.flags & 0x6000) >> 13;
-                Char ft = (p == 0) ? '-' : (p == 2) ? 'd' : (p == 1) ? 'c' : 'b';
-                String op = Perm((iNode.flags & 0x01c0) >> 6, iNode.flags & 0x0800);
-                String gp = Perm((iNode.flags & 0x0038) >> 3, iNode.flags & 0x0400);
-                String wp = Perm(iNode.flags & 0x0007, 0);
-                // TODO: show file date
-                switch (ft)
-                {
-                    case '-':
-                    case 'd':
-                        output.WriteLine("{0,5:D0} {1}{2}{3}{4} {5,2:D0} {6,-5} {7,7:D0} {8,-14}", iNum, ft, op, gp, wp, iNode.nlinks, iNode.uid.ToString(), iNode.size, name);
-                        break;
-                    case 'b':
-                    case 'c':
-                        output.WriteLine("{0,5:D0} {1}{2}{3}{4} {5,2:D0} {6,-5} {7,3:D0},{8,3:D0} {9,-14}", iNum, ft, op, gp, wp, iNode.nlinks, iNode.uid.ToString(), iNode[0] >> 8, iNode[0] & 0x00ff, name);
-                        break;
-                }
-            }
-        }
-
-        private String Perm(Int32 permBits, Int32 isSUID)
-        {
-            Char[] C = new Char[3];
-            C[0] = ((permBits & 4) == 0) ? '-' : 'r';
-            C[1] = ((permBits & 2) == 0) ? '-' : 'w';
-            C[2] = ((permBits & 1) == 0) ? '-' : 'x';
-            if (isSUID != 0) C[2] = 's';
-            return new String(C);
-        }
-
-        public override void DumpDir(String fileSpec, TextWriter output)
-        {
-            ListDir(fileSpec, output);
-        }
-
-        public override void ListFile(String fileSpec, Encoding encoding, TextWriter output)
-        {
-            Inode iNode;
-            String name;
-            if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return;
-            String buf = encoding.GetString(ReadFile(mDisk, iNode));
-            Int32 p = 0;
-            for (Int32 i = 0; i < buf.Length; i++)
-            {
-                if (buf[i] != '\n') continue;
-                output.WriteLine(buf.Substring(p, i - p));
-                p = i + 1;
-            }
-        }
-
-        public override void DumpFile(String fileSpec, TextWriter output)
-        {
-            Inode iNode;
-            String name;
-            if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return;
-            Program.Dump(null, ReadFile(mDisk, iNode), output, 16, 512, Program.DumpOptions.ASCII);
-        }
-
-        public override String FullName(String fileSpec)
-        {
-            Inode iNode;
-            String name;
-            if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return null;
-            return name;
-        }
-
-        public override Byte[] ReadFile(String fileSpec)
-        {
-            Inode iNode;
-            String name;
-            if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return new Byte[0];
-            return ReadFile(mDisk, iNode);
-        }
-
-        public override Boolean SaveFS(String fileName, String format)
-        {
-            throw new NotImplementedException();
-        }
-
-        private Boolean FindFile(Inode dirNode, String dirName, String pathSpec, out Inode iNode, out String pathName)
-        {
-            iNode = null;
-            pathName = null;
-            if ((pathSpec == null) || (pathSpec.Length == 0)) return false;
-
-            // start at root directory for absolute paths
-            if (pathSpec[0] == '/')
-            {
-                dirNode = Inode.Get(mDisk, mRoot);
-                dirName = "/";
-                while ((pathSpec.Length != 0) && (pathSpec[0] == '/')) pathSpec = pathSpec.Substring(1);
-            }
-
-            // find directory containing file
-            Int32 p;
-            while ((p = pathSpec.IndexOf('/')) != -1)
-            {
-                String name;
-                if (!FindFile(dirNode, dirName, pathSpec.Substring(0, p), out iNode, out name)) return false;
-                if ((iNode.flags & 0x6000) != 0x4000) return false; // all path prefix components must be dirs
-                dirNode = iNode;
-                dirName = String.Concat(dirName, name, "/");
-                pathSpec = pathSpec.Substring(p + 1);
-                while ((pathSpec.Length != 0) && (pathSpec[0] == '/')) pathSpec = pathSpec.Substring(1);
-            }
-
-            // if no file component, the last directory found is what we're looking for
-            if (pathSpec.Length == 0)
-            {
-                iNode = dirNode;
-                pathName = dirName;
-                return true;
-            }
-
-            // find the file in the final directory
-            Regex RE = Regex(pathSpec);
-            Byte[] data = ReadFile(mDisk, dirNode);
-            for (Int32 bp = 0; bp < data.Length; bp += 16)
-            {
-                Int32 iNum = BitConverter.ToUInt16(data, bp);
-                if (iNum == 0) continue;
-                for (p = 2; p < 16; p++) if (data[bp + p] == 0) break;
-                String name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
-                if (RE.IsMatch(name))
-                {
-                    iNode = Inode.Get(mDisk, iNum);
-                    pathName = String.Concat(dirName, name, ((iNode.flags & 0x6000) == 0x4000) ? "/" : null);
-                    return true;
-                }
-            }
-            return false;
         }
     }
 }

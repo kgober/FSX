@@ -309,9 +309,9 @@ namespace FSX
             {
                 foreach (Type t in a.GetTypes())
                 {
-                    if ((t.IsSubclassOf(typeof(FileSystem))) && (!t.IsAbstract))
+                    if ((typeof(IFileSystemGetTest).IsAssignableFrom(t)) && (!t.IsAbstract))
                     {
-                        MethodInfo minfo = t.GetMethod("GetTest");
+                        MethodInfo minfo = t.GetMethod("GetTest", BindingFlags.Public|BindingFlags.Static|BindingFlags.DeclaredOnly);
                         if (minfo == null) continue;
                         FileSystem.TestDelegate method = minfo.Invoke(null, null) as FileSystem.TestDelegate;
                         if (method == null) continue;
@@ -498,18 +498,18 @@ namespace FSX
                 CHSDisk d = CHSDisk.LoadIMD(s, data);
                 if (d != null) return LoadFS(s, d);
             }
-            if ((path.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)) && ((data.Length % 2048) == 0))
-            {
-                if (IndexOf(Encoding.ASCII, "DECRT11A    ", data, 512, 512) == 0x3f0)
-                {
-                    // RT-11 .ISO image file (e.g. RT11DV10.ISO)
-                    LBADisk d = new LBADisk(s, data, 512);
-                    Int32 size;
-                    Type type;
-                    if (RT11.Test(d, 5, out size, out type)) return new RT11(d); // RT-11 .ISO special format fails level 6 check
-                }
-                // TODO: add actual ISO9660 image file support
-            }
+            //if ((path.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)) && ((data.Length % 2048) == 0))
+            //{
+            //    if (IndexOf(Encoding.ASCII, "DECRT11A    ", data, 512, 512) == 0x3f0)
+            //    {
+            //        // RT-11 .ISO image file (e.g. RT11DV10.ISO)
+            //        LBADisk d = new LBADisk(s, data, 512);
+            //        Int32 size;
+            //        Type type;
+            //        if (RT11.Test(d, 5, out size, out type)) return new RT11(d); // RT-11 .ISO special format fails level 6 check
+            //    }
+            //    // TODO: add actual ISO9660 image file support
+            //}
             if (path.EndsWith(".d64", StringComparison.OrdinalIgnoreCase))
             {
                 CHSDisk d = CHSDisk.LoadD64(s, data);
@@ -637,57 +637,41 @@ namespace FSX
             if (data.Length == 252928) // 76 tracks of 26 128-byte sectors (DEC RX01)
             {
                 CHSDisk d = new CHSDisk(source, data, 128, 76, 1, 26);
-                FileSystem fs = TryDEC(d);
-                if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 256256) // 77 tracks of 26 128-byte sectors (IBM 3740)
             {
                 CHSDisk d = new CHSDisk(source, data, 128, 77, 1, 26);
-                FileSystem fs = TryDEC(d);
-                if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 266240) // 80 tracks of 26 128-byte sectors (raw 8" SSSD diskette)
             {
                 CHSDisk d = new CHSDisk(source, data, 128, 80, 1, 26);
-                FileSystem fs = TryDEC(d);
-                if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 295936) // 578 512-byte blocks (DEC TU56 DECTape standard format)
             {
                 LBADisk d = new LBADisk(source, data, 512);
-                FileSystem fs = TryDEC(d);
-                if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 409600) // 80 tracks of 10 512-byte sectors (DEC RX50)
             {
                 CHSDisk d = new CHSDisk(source, data, 512, 80, 1, 10);
-                FileSystem fs = TryDEC(d);
-                if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 505856) // 76 tracks of 26 256-byte sectors (DEC RX02)
             {
                 CHSDisk d = new CHSDisk(source, data, 256, 76, 1, 26);
-                FileSystem fs = TryDEC(d);
-                if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 512512) // 77 tracks of 26 256-byte sectors (IBM 3740)
             {
                 CHSDisk d = new CHSDisk(source, data, 256, 77, 1, 26);
-                FileSystem fs = TryDEC(d);
-                if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 532480) // 80 tracks of 26 256-byte sectors (raw 8" SSDD diskette)
             {
                 CHSDisk d = new CHSDisk(source, data, 256, 80, 1, 26);
-                FileSystem fs = TryDEC(d);
-                if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 533248) // 77 tracks, 2083 blocks (Commodore 8050)
@@ -715,33 +699,21 @@ namespace FSX
             else if (data.Length == 1228800) // 4800 256-byte sectors (DEC RK02, 3 spare tracks)
             {
                 CHSDisk d = new CHSDisk(source, data, 256, 200, 2, 12);
-                FileSystem fs = TryDEC(d);
-                if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 1247232) // 4872 256-byte sectors (DEC RK02, all tracks used)
             {
                 CHSDisk d = new CHSDisk(source, data, 256, 203, 2, 12);
-                FileSystem fs = Unix.Try(d);
-                if (fs != null) return fs;
-                fs = TryDEC(d);
-                if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 2457600) // 4800 512-byte sectors (DEC RK03, 3 spare tracks)
             {
                 CHSDisk d = new CHSDisk(source, data, 512, 200, 2, 12);
-                FileSystem fs = TryDEC(d);
-                if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length == 2494464) // 4872 512-byte sectors (DEC RK03, all tracks used)
             {
                 CHSDisk d = new CHSDisk(source, data, 512, 203, 2, 12);
-                FileSystem fs = Unix.Try(d);
-                if (fs != null) return fs;
-                fs = TryDEC(d);
-                if (fs != null) return fs;
                 return LoadFS(source, d);
             }
             else if (data.Length % 512 == 0) // some number of 512-byte blocks
@@ -755,39 +727,89 @@ namespace FSX
 
         static FileSystem LoadFS(String source, Disk image)
         {
-            FileSystem fs = Unix.Try(image);
-            if (fs != null) return fs;
+            // try to provide each file system test with a disk with the correct block size
+            Dictionary<FileSystem.TestDelegate, Disk> D = new Dictionary<FileSystem.TestDelegate, Disk>();
+            Int32 size = -1;
+            Type type = null;
+            Int32 level = 0; // entries in D have passed this level
+            foreach (FileSystem.TestDelegate test in Tests)
+            {
+                if (test(image, level, out size, out type))
+                {
+                    Debug(2, "Pass: {0} level {1:D0}", test.Method.DeclaringType.Name, level);
+                    D.Add(test, image);
+                    continue;
+                }
+                if ((size != -1) && (size != image.BlockSize) && ((size % image.BlockSize) == 0))
+                {
+                    Disk disk = new ClusteredDisk(image, size / image.BlockSize, 0);
+                    if (test(disk, 0, out size, out type))
+                    {
+                        Debug(2, "Pass: {0} level {1:D0} (with ClusteredDisk)", test.Method.DeclaringType.Name, level);
+                        D.Add(test, disk);
+                        continue;
+                    }
+                }
+            }
+
+            // if there were any candidates that passed level 0, continue to try them
+            FileSystem fs;
+            if (D.Count != 0)
+            {
+                while (true)
+                {
+                    level++;
+                    FileSystem.TestDelegate test = null;
+                    Disk disk = null;
+                    Dictionary<FileSystem.TestDelegate, Disk> D2 = new Dictionary<FileSystem.TestDelegate, Disk>();
+                    foreach (KeyValuePair<FileSystem.TestDelegate, Disk> entry in D)
+                    {
+                        test = entry.Key;
+                        disk = entry.Value;
+                        Int32 s;
+                        Type t;
+                        if (test(disk, level, out s, out t))
+                        {
+                            Debug(2, "Pass: {0} level {1:D0}", test.Method.DeclaringType.Name, level);
+                            size = s;
+                            type = t;
+                            D2.Add(test, disk);
+                        }
+                    }
+                    if ((level > 1) && (D2.Count == 1))
+                    {
+                        // if only one test passed (and we got past level 1), choose that type
+                        if ((size != -1) && (size != disk.BlockCount)) disk = new PaddedDisk(disk, size - disk.BlockCount);
+                        fs = ConstructFS(type, disk);
+                        if (fs != null) return fs;
+                    }
+                    else if (D2.Count == 0)
+                    {
+                        // if no test passed this round, the result is indeterminate
+                        level--; // D still has previous round's results
+                        break;
+                    }
+                    D = D2;
+                }
+            }
+
+            // TODO: if D is non-empty, see if any use can be made of the knowledge
+            // that entries in D all passed at least level 'level' tests
 
             fs = TryDEC(image);
             if (fs != null) return fs;
 
-            Int32 level = 0;
-            Int32 size = image.BlockCount;
-            Type type = null;
-            while (true)
-            {
-                Int32 ct = 0;
-                foreach (FileSystem.TestDelegate d in Tests)
-                {
-                    Int32 s;
-                    Type t;
-                    if (d(image, level, out s, out t))
-                    {
-                        ct++;
-                        if ((level >= 2) && (s != -1)) size = s;
-                        if (level >= 2) type = t;
-                    }
-                }
-                if ((level >= 2) && (ct == 1)) break; // if exactly one level 2+ test passed, choose that type
-                else if (ct == 0) return null; // if no test passed, there's no clear choice
-                else level++; // otherwise increase the level and do another round of tests
-            }
-            if (image.BlockCount != size) image = new PaddedDisk(image, size - image.BlockCount);
-            Type[] sig = new Type[1]; // constructor's type signature
-            sig[0] = image.GetType();
-            ConstructorInfo cinfo = type.GetConstructor(sig);
-            if (cinfo == null) return null;
-            Object[] args = new Object[1]; // constructor's arguments
+            return null;
+        }
+
+        // call the constructor for 'type', passing in 'image'
+        static FileSystem ConstructFS(Type type, Disk image)
+        {
+            Type[] argTypes = new Type[1]; // constructor parameter types
+            argTypes[0] = image.GetType();
+            ConstructorInfo cinfo = type.GetConstructor(argTypes);
+            if (cinfo == null) return null; // this fs type doesn't have a constructor accepting this disk type
+            Object[] args = new Object[1]; // constructor arguments
             args[0] = image;
             return cinfo.Invoke(args) as FileSystem;
         }
@@ -823,7 +845,7 @@ namespace FSX
                 }
                 if ((disk.BlockSize == 256) && (disk.MaxSector(0, 0) == 26) && (disk.BlockCount == 1976))
                 {
-                    // 76 tracs, probably an RX02 image with track 0 skipped
+                    // 76 tracks, probably an RX02 image with track 0 skipped
                     Boolean b4 = IsASCIIText(disk[0, 0, 4], 0x58, 24); // look for volume label in track 0, sector 4 (no interleave)
                     Boolean b7 = IsASCIIText(disk[0, 0, 7], 0x58, 24); // look for volume label in track 0, sector 7 (2:1 'soft' interleave)
                     FileSystem fs = null;

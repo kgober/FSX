@@ -21,11 +21,12 @@
 
 
 // To facilitate accessing disks whose file system type is unknown, each FileSystem
-// may implement a test method that can be used to check for the presence of on-disk
+// may provide a test method that can be used to check for the presence of on-disk
 // data structures in increasing levels of detail, until the file system type and size
-// can be reliably inferred.  Each FileSystem that supports this should implement a
-// GetTest() function that returns a 'TestDelegate'.  When the program needs to
-// identify a file system type, it will invoke TestDelegate as needed.
+// can be reliably inferred.  Each FileSystem that supports this should implement the
+// IFileSystemGetTest interface, with the implementing class containing a public static
+// GetTest() method that returns a 'TestDelegate'.  When the program needs to identify
+// a file system type, it will invoke TestDelegate as needed.
 //
 // To enable comparison of Test results, the levels should be defined as follows:
 //  0 - check basic disk parameters (return required block size and disk type)
@@ -47,8 +48,13 @@
 // the hardware, or stored on the disk controller rather than on the disk itself.
 // For levels 2 and higher a size of -1 means the size can't be determined without
 // examining the disk image at a higher level (e.g. the RT-11 home block doesn't
-// include the volume size, so a level 3 check is required).
-
+// include the volume size, so a level 3 check is required).  If a test method does
+// not implement a given level (but it does implement higher ones) it should return
+// true (i.e. an unimplemented test level should be taken as one with no requirements
+// which can therefore never fail).  If a test method does not support a given level
+// (nor any higher levels) it should return false.  Returning true is an invitation
+// to be called again with a higher level, while returning false is an indication
+// that higher levels of testing are unlikely to be useful (or possible).
 
 // Future Improvements / To Do
 // eliminate DumpDir (merge functionality into DumpFile)
@@ -60,6 +66,10 @@ using System.Text;
 
 namespace FSX
 {
+    interface IFileSystemGetTest
+    {
+    }
+
     abstract class FileSystem
     {
         public delegate Boolean TestDelegate(Disk disk, Int32 level, out Int32 size, out Type type);

@@ -26,9 +26,10 @@
 // can be reliably inferred.  Each FileSystem that supports this should implement the
 // IFileSystemGetTest interface, with the implementing class containing a public static
 // GetTest() method that returns a 'TestDelegate'.  When the program needs to identify
-// a file system type, it will invoke TestDelegate as needed.
+// a file system type, it will invoke TestDelegate as needed:
+// Boolean TestDelegate(Disk disk, Int32 level, out Int32 size, out Type type);
 //
-// To enable comparison of Test results, the levels should be defined as follows:
+// To enable comparison of Test results, 'level' should be defined as follows:
 //  0 - check basic disk parameters (return required block size and disk type)
 //  1 - check boot block (return disk size and type)
 //  2 - check volume descriptor (aka home/super block) (return volume size and type)
@@ -38,23 +39,24 @@
 //  6 - check data block allocation (return volume size and type)
 //
 // Each test method should return true if the requirements for the given level (and
-// all lower levels) are met by the disk, or false otherwise.  For level 0, each test
-// method also specifies via 'out' parameters the block size and disk type required
-// (e.g. Commodore disks must have 256-byte blocks and be track/sector addressable).
-// For level 1, each test method specifies the disk size and disk type required, and
-// for levels 2 and higher they specify the volume size and volume type that would
-// be most suitable.  For level 1, a size of -1 means that no specific disk size can
-// be determined, which is not uncommon for images of disks whose sizes were fixed by
-// the hardware, or stored on the disk controller rather than on the disk itself.
-// For levels 2 and higher a size of -1 means the size can't be determined without
-// examining the disk image at a higher level (e.g. the RT-11 home block doesn't
-// include the volume size, so a level 3 check is required).  If a test method does
+// all lower levels) are met by the disk, or false otherwise.  If a test method does
 // not implement a given level (but it does implement higher ones) it should return
-// true (i.e. an unimplemented test level should be taken as one with no requirements
-// which can therefore never fail).  If a test method does not support a given level
-// (nor any higher levels) it should return false.  Returning true is an invitation
-// to be called again with a higher level, while returning false is an indication
-// that higher levels of testing are unlikely to be useful (or possible).
+// true.  Returning true is an invitation to be called again with a higher level;
+// returning false indicates that higher levels are unlikely to be useful/possible.
+//
+// For level 0, each test method also specifies via 'out' parameters the block size
+// and disk type required (e.g., Commodore disks must have 256-byte blocks and be
+// track/sector addressable).  For level 1, each test method specifies the disk size
+// and disk type required, and for levels 2 and higher they specify the volume size
+// and volume type that would be most suitable.
+//
+// For level 1, a size of -1 means that no specific disk size can be determined,
+// which is not uncommon for images of disks whose sizes were fixed by the hardware,
+// or stored on the disk controller rather than on the disk itself.  For levels 2
+// and higher a size of -1 means the size can't be determined without examining the
+// disk image at a higher level (e.g., the RT-11 home block doesn't include the
+// volume size, so a level 3 check is required).  
+
 
 // Future Improvements / To Do
 // eliminate DumpDir (merge functionality into DumpFile)

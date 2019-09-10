@@ -42,7 +42,7 @@
 
 
 // Future Improvements / To Do
-// complete Test level 4 (check file headers)
+// for Test level 4, check SaveAt and REL block chain validity
 // implement Test level 6 (check data block allocation)
 // rewrite FindFile to return true/false
 // infer missing file extension when saving images
@@ -391,6 +391,7 @@ namespace FSX
             }
 
             // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
+            // treat the first block of the BAM/directory chain as the 'volume descriptor'
             size = -1;
             type = null;
             Int32 t = (disk.MaxCylinder <= 42) ? 18 : 39;
@@ -405,6 +406,12 @@ namespace FSX
             if ((t == 18) && (T.Length == 19) && (fmt != 0x41)) return Program.Debug(false, 1, "CBMDOS.Test: BAM format byte incorrect (is 0x{0:x2}, expect 0x41)", fmt);
             if ((t == 18) && (fmt == 0x43)) return Program.Debug(false, 1, "CBMDOS.Test: BAM format byte incorrect (is 0x43, expect 0x01 or 0x41)");
             if ((t == 39) && (fmt != 0x43)) return Program.Debug(false, 1, "CBMDOS.Test: BAM format byte incorrect (is 0x{0:x2}, expect 0x43)", fmt);
+            if ((fmt == 0x01) && (B[165] != 0xa0)) return Program.Debug(false, 1, "CBMDOS.Test: directory header version byte invalid (is 0x{0:x2}, expect 0xa0 ' ')", B[165]);
+            if ((fmt == 0x01) && (B[166] != 0xa0)) return Program.Debug(false, 1, "CBMDOS.Test: directory header format byte invalid (is 0x{0:x2}, expect 0xa0 ' ')", B[166]);
+            if ((fmt == 0x41) && (B[165] != 0x32)) return Program.Debug(false, 1, "CBMDOS.Test: directory header version byte invalid (is 0x{0:x2}, expect 0x32 '2')", B[165]);
+            if ((fmt == 0x41) && (B[166] != 0x41)) return Program.Debug(false, 1, "CBMDOS.Test: directory header format byte invalid (is 0x{0:x2}, expect 0x41 'A')", B[166]);
+            if ((fmt == 0x43) && (B[27] != 0x32)) return Program.Debug(false, 1, "CBMDOS.Test: directory header version byte invalid (is 0x{0:x2}, expect 0x32 '2')", B[27]);
+            if ((fmt == 0x43) && (B[28] != 0x43)) return Program.Debug(false, 1, "CBMDOS.Test: directory header format byte invalid (is 0x{0:x2}, expect 0x43 'C')", B[28]);
             size = (fmt == 0x01) ? 690 : (fmt == 0x41) ? 683 : (disk.MaxCylinder <= 77) ? 2083 : 4166;
             type = typeof(CBMDOS);
             if (level == 2) return true;
@@ -412,12 +419,6 @@ namespace FSX
             // level 3 - check directory structure (return volume size and type)
             Int32 dc = (fmt != 0x43) ? 1 : (disk.MaxCylinder <= 77) ? 3 : 5; // number of blocks that precede first directory block
             Int32 bc = (fmt != 0x43) ? 0 : 1; // number of blocks that precede first BAM block
-            if ((fmt == 0x01) && (B[165] != 0xa0)) return Program.Debug(false, 1, "CBMDOS.Test: directory header version byte invalid (is 0x{0:x2}, expect 0xa0 ' ')", B[165]);
-            if ((fmt == 0x01) && (B[166] != 0xa0)) return Program.Debug(false, 1, "CBMDOS.Test: directory header format byte invalid (is 0x{0:x2}, expect 0xa0 ' ')", B[166]);
-            if ((fmt == 0x41) && (B[165] != 0x32)) return Program.Debug(false, 1, "CBMDOS.Test: directory header version byte invalid (is 0x{0:x2}, expect 0x32 '2')", B[165]);
-            if ((fmt == 0x41) && (B[166] != 0x41)) return Program.Debug(false, 1, "CBMDOS.Test: directory header format byte invalid (is 0x{0:x2}, expect 0x41 'A')", B[166]);
-            if ((fmt == 0x43) && (B[27] != 0x32)) return Program.Debug(false, 1, "CBMDOS.Test: directory header version byte invalid (is 0x{0:x2}, expect 0x32 '2')", B[27]);
-            if ((fmt == 0x43) && (B[28] != 0x43)) return Program.Debug(false, 1, "CBMDOS.Test: directory header format byte invalid (is 0x{0:x2}, expect 0x43 'C')", B[28]);
             Int32 maxSect = -1;
             for (Int32 i = disk.MinCylinder; i <= disk.MaxCylinder; i++)
             {
@@ -425,7 +426,7 @@ namespace FSX
                 if ((T != null) && (T.MaxSector > maxSect)) maxSect = T.MaxSector;
             }
             Int32[,] BMap = new Int32[disk.MaxCylinder + 1, maxSect + 1];
-            Int32 sc = 0; // sector count within directory chain
+            Int32 sc = 0; // sectors used count
             Int32 st = 1; // starting track expected in next BAM block (DOS 2.5 / 2.7 only)
             while (t != 0)
             {
@@ -436,22 +437,34 @@ namespace FSX
                 if (B == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid directory chain at segment {0:D0}: sector not found for {1:D0}/{2:D0}", sc, t, s);
                 if (BMap[t, s] != 0) return Program.Debug(false, 1, "CBMDOS.Test: invalid directory chain at segment {0:D0}: cycle detected at {1:D0}/{2:D0}", sc, t, s);
                 BMap[t, s] = sc;
-                Int32 l = (B[0] == 0) ? B[1] + 1 : B.Size;
                 if (dc > 0)
                 {
                     dc--;
-                    if (bc > 0) // directory header block
+                    if (bc > 0) // directory header block (DOS 2.5 / 2.7 only)
                     {
                         bc--;
                     }
                     else // this is a BAM block
                     {
                         if (B[2] != fmt) return Program.Debug(false, 1, "CBMDOS.Test: invalid directory chain at segment {0:D0}: BAM format byte invalid at {1:D0}/{2:D0} (is 0x{3:x2}, expect 0x{4:x2})", sc, t, s, B[2], fmt);
+                        Int32 TRK = 35; // number of BAM entries
+                        Int32 SKIP = 4; // bytes before first BAM entry
+                        Int32 BPE = 4; // bytes per BAM entry
                         if (fmt == 0x43) // track start/limit only present in DOS 2.5 / 2.7
                         {
                             if (B[4] != st) return Program.Debug(false, 1, "CBMDOS.Test: BAM coverage error at {0:D0}/{1:D0}: start track invalid (is {2:D0}, expect {3:D0})", t, s, B[4], st);
                             if (B[5] <= st) return Program.Debug(false, 1, "CBMDOS.Test: BAM coverage error at {0:D0}/{1:D0}: limit track invalid (is {2:D0}, expect n > {3:D0})", t, s, B[5], st);
                             st = B[5];
+                            TRK = B[5] - B[4];
+                            SKIP = 6;
+                            BPE = 5;
+                        }
+                        Int32 l = SKIP + TRK * BPE;
+                        for (Int32 i = SKIP; i < l; i += BPE)
+                        {
+                            Int32 n = 0;
+                            for (Int32 j = 1; j < BPE; j++) for (Int32 k = 1; k < 256; k <<= 1) if ((B[i + j] & k) != 0) n++;
+                            if (n != B[i]) return Program.Debug(false, 1, "CBMDOS.Test: BAM summary error at {0:D0}/{1:D0}: availability bits inconsistent with count (is {2:D0}, expect {3:D0})", t, s, n, B[i]);
                         }
                     }
                 }
@@ -468,28 +481,39 @@ namespace FSX
             while (t != 0)
             {
                 B = GetTrack(disk, t)[s];
-                Int32 l = (B[0] == 0) ? B[1] + 1 : B.Size;
-                for (Int32 bp = 2; bp < level; bp += 32)
+                Int32 l = (B[0] == 0) ? B[1] + 1 : B.Size; // where this block's data ends
+                for (Int32 bp = 2; bp < l; bp += 32)
                 {
                     fc += 65536;
-                    sc = 0;
                     Byte b = B[bp]; // file type
                     if (b == 0) continue; // directory entry not in use
-                    Boolean fClosed = ((b & 0x80) != 0);
-                    Boolean fLocked = ((b & 0x40) != 0);
-                    Boolean fSaveAt = ((b & 0x20) != 0);
+                    // TODO: check SaveAt block chain, and REL side chain
+                    //Boolean fSaveAt = ((b & 0x20) != 0);
                     Int32 fType = b & 0x1f;
                     if (fType > 4) return Program.Debug(false, 1, "CBMDOS.Test: invalid file type in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, require 0 <= n <= 4)", t, s, bp, fType);
-                    Int32 ft = B[bp + 1]; // track of first block
-                    if ((T = GetTrack(disk, ft)) == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid start track in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0} <= n <= {5:D0})", t, s, bp, ft, disk.MinCylinder, disk.MaxCylinder);
-                    Int32 fs = B[bp + 2];
-                    if (T[fs] == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid start sector in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0} <= n <= {5:D0})", t, s, bp, fs, T.MinSector, T.MaxSector);
                     Int32 n = B.ToUInt16(bp + 28); // file block count
                     if (n > (size - sc)) return Program.Debug(false, 1, "CBMDOS.Test: invalid block count in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect n <= {4:D0})", t, s, bp, n, size - sc);
-                    // file size in directory matches number of blocks in data block chain
-                    // error if file blocks impossible (i.e. not within volume)
-                    // warning if file blocks not valid (i.e. not present in disk image)
-                    // file data block chains contain no cycles
+                    Int32 ft = B[bp + 1]; // track of first block
+                    Int32 fs = B[bp + 2]; // sector of first block
+                    Int32 ct= 0; // count of sectors in this file
+                    while (ft != 0)
+                    {
+                        ct++;
+                        if ((T = GetTrack(disk, ft)) == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid start track in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0} <= n <= {5:D0})", t, s, bp, ft, disk.MinCylinder, disk.MaxCylinder);
+                        if (T[fs] == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid start sector in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0} <= n <= {5:D0})", t, s, bp, fs, T.MinSector, T.MaxSector);
+                        if (BMap[ft, fs] != 0)
+                        {
+                            if ((BMap[ft, fs] & 0xffff0000) == fc)
+                                return Program.Debug(false, 1, "CBMDOS.Test: invalid block chain for directory entry {0:D0}/{1:D0} 0x{2:x2} (cycle detected at {3:D0}/{4:D0})", t, s, bp, ft, fs);
+                            else
+                                return Program.Debug(false, 1, "CBMDOS.Test: invalid block chain for directory entry {0:D0}/{1:D0} 0x{2:x2} (block {3:D0}/{4:D0} is in use by another file)", t, s, bp, ft, fs);
+                        }
+                        BMap[ft, fs] = fc + ct;
+                        ft = T[fs][0];
+                        fs = T[fs][1];
+                    }
+                    if (n != ct) return Program.Debug(false, 1, "CBMDOS.Test: inconsistent block count in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0})", t, s, bp, n, ct);
+                    sc += ct;
                 }
                 t = B[0];
                 s = B[1];
@@ -497,10 +521,10 @@ namespace FSX
             if (level == 4) return true;
 
             // level 5 - check file header allocation (return volume size and type)
+            // nothing to test here, file headers are integrated into the directory
             if (level == 5) return true;
 
             // level 6 - check data block allocation (return volume size and type)
-            // blocks allocated to at most one file
             // free/used blocks correctly recorded in BAM
             // error if free blocks impossible (i.e. not within volume)
             if (level == 6) return true;

@@ -46,34 +46,6 @@
 
 // Future Improvements / To Do
 // allow files to be written/deleted in images
-// find a better place for the below comments (maybe DEC.cs)
-
-
-// DEC RX01 Floppy - IBM 3740 format (8" SSSD diskette, 77 tracks, 26 sectors)
-//
-// DEC operating systems typically do not use track 0, so an RX01 diskette
-// has an effective capacity of 76 tracks (2002 sectors).
-//
-// 'Soft' Interleave imposes a 'logical' sector order on top of the physical
-// sector order.  Presumably the reason for this is to gain the performance
-// benefits of optimal interleave without reformatting the diskette (e.g. to
-// maintain interoperability when using diskettes for foreign data transfer).
-// Sector interleave is 2:1, with a 6 sector track-to-track skew.
-
-// DEC RX02 Floppy - DEC RX01 format, but using MFM-encoded sector data (only)
-//
-// Note that the RX02 uses FM recording for sector headers, just like the RX01.
-// This mode switch between the sector header and sector data is atypical and
-// makes RX02 diskettes hard to access on other systems.
-
-// DEC RK05 DECpack
-//
-// DEC operating systems typically reserve the last 3 cylinders for bad block
-// handling, leaving an effective capacity of 200 cylinders, each containing
-// 2 tracks of 12 512-byte sectors, or a total of 4800 blocks.
-//
-// Some operating systems (notably Unix) use all 203 cylinders (4872 blocks)
-// and therefore require special error-free disk cartridges.
 
 
 using System;

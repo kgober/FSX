@@ -44,6 +44,7 @@
 
 
 // Improvements / To Do
+// in ListDir, handle '/' by itself (or patterns like '/*')
 // in ListDir, handle directory paths not ending in '/'
 // in ListDir, show file dates
 // support Unix v6 inode format (and identify when to use it)
@@ -310,7 +311,7 @@ namespace FSX
                 if (!FindFile(dirNode, dirName, pathSpec.Substring(0, p), out iNode, out name)) return false;
                 if ((iNode.flags & 0x6000) != 0x4000) return false; // all path prefix components must be dirs
                 dirNode = iNode;
-                dirName = String.Concat(dirName, name, "/");
+                dirName = name;
                 pathSpec = pathSpec.Substring(p + 1);
                 while ((pathSpec.Length != 0) && (pathSpec[0] == '/')) pathSpec = pathSpec.Substring(1);
             }
@@ -335,7 +336,19 @@ namespace FSX
                 if (RE.IsMatch(name))
                 {
                     iNode = Inode.Get(mDisk, iNum);
-                    pathName = String.Concat(dirName, name, ((iNode.flags & 0x6000) == 0x4000) ? "/" : null);
+                    if (name == ".")
+                    {
+                        pathName = dirName;
+                    }
+                    else if (name == "..")
+                    {
+                        Int32 q = dirName.Substring(0, dirName.Length - 1).LastIndexOf('/');
+                        pathName = (q == -1) ? "/" : dirName.Substring(0, q + 1);
+                    }
+                    else
+                    {
+                        pathName = String.Concat(dirName, name, ((iNode.flags & 0x6000) == 0x4000) ? "/" : null);
+                    }
                     return true;
                 }
             }
@@ -407,8 +420,8 @@ namespace FSX
             for (UInt16 iNum = 1; iNum <= isize * 16; iNum++)
             {
                 iNode = Inode.Get(disk, iNum);
-                // sometimes a free i-node has 'nlinks' -1
-                if (((iNode.flags & 0x8000) == 0) && (iNode.nlinks != 0) && (iNode.nlinks != 255)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
+                // sometimes a free i-node has 'nlinks' -1. or other values.
+                //if (((iNode.flags & 0x8000) == 0) && (iNode.nlinks != 0) && (iNode.nlinks != 255)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
                 if (((iNode.flags & 0x8000) != 0) && (iNode.nlinks == 0)) return Program.Debug(false, 1, "Unix.Test: i-node {1:D0} is used but has zero link count", iNum);
                 if (((iNode.flags & 0x1000) == 0) && (iNode.size > 4096)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} size exceeds small file limit (is {1:D0}, require n <= 4096)", iNum, iNode.size);
                 if (((iNode.flags & 0x1000) != 0) && (iNode.size > 1048576)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} size exceeds large file limit (is {1:D0}, require n <= 1048576)", iNum, iNode.size);

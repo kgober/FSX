@@ -44,7 +44,6 @@
 
 
 // Improvements / To Do
-// in ListDir, handle '/' by itself (or patterns like '/*')
 // in ListDir, handle directory paths not ending in '/'
 // in ListDir, show file dates
 // support Unix v6 inode format (and identify when to use it)
@@ -171,6 +170,13 @@ namespace FSX
             if ((fileSpec == null) || (fileSpec.Length == 0)) fileSpec = "*";
 
             Inode dirNode = mDirNode;
+            if (fileSpec[0] == '/')
+            {
+                dirNode = Inode.Get(mDisk, mRoot);
+                while ((fileSpec.Length != 0) && (fileSpec[0] == '/')) fileSpec = fileSpec.Substring(1);
+                if (fileSpec.Length == 0) fileSpec = "*";
+            }
+
             String name;
             Int32 p = fileSpec.LastIndexOf('/');
             if (p != -1)

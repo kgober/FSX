@@ -7,7 +7,7 @@ Currently the following types of volumes are supported:
 * Files-11 (a.k.a. ODS-1, the RSX-11 file system format)
 * Commodore 1541/2040/4040/8050/8250
 
-The following encoding and/or compression formats are supported:
+The following storage formats are supported:
 * ImageDisk (.IMD) files
 * gzip (.gz) files
 * .d64/.d67/.d80/.d82 files

@@ -37,6 +37,7 @@ namespace FSX
         public abstract Byte this[Int32 offset] { get; set; }
         public abstract void CopyTo(Byte[] targetBuffer, Int32 targetOffset);
         public abstract void CopyTo(Byte[] targetBuffer, Int32 targetOffset, Int32 blockOffset, Int32 count);
+        public abstract void CopyFrom(Byte[] sourceBuffer, Int32 sourceOffset, Int32 blockOffset, Int32 count);
         public abstract Byte ToByte(Int32 startIndex);
         public abstract Byte ToByte(ref Int32 startIndex);
         public abstract Int16 ToInt16(Int32 startIndex);
@@ -129,6 +130,11 @@ namespace FSX
         public override void CopyTo(Byte[] targetBuffer, Int32 targetOffset, Int32 blockOffset, Int32 count)
         {
             for (Int32 i = 0; i < count; i++) targetBuffer[targetOffset++] = mData[blockOffset++];
+        }
+
+        public override void CopyFrom(Byte[] sourceBuffer, Int32 sourceOffset, Int32 blockOffset, Int32 count)
+        {
+            for (Int32 i = 0; i < count; i++) mData[blockOffset++] = sourceBuffer[sourceOffset++];
         }
 
         public override Byte ToByte(Int32 startIndex)
@@ -704,6 +710,21 @@ namespace FSX
                     if (count < n) n = count;
                     mData[i++].CopyTo(targetBuffer, targetOffset, blockOffset, n);
                     targetOffset += n;
+                    blockOffset = 0;
+                    count -= n;
+                }
+            }
+
+            public override void CopyFrom(Byte[] sourceBuffer, Int32 sourceOffset, Int32 blockOffset, Int32 count)
+            {
+                Int32 i = blockOffset / mBlockSize;
+                blockOffset %= mBlockSize;
+                while (count > 0)
+                {
+                    Int32 n = mBlockSize - blockOffset; // number of bytes available to copy in block
+                    if (count < n) n = count;
+                    mData[i++].CopyFrom(sourceBuffer, sourceOffset, blockOffset, n);
+                    sourceOffset += n;
                     blockOffset = 0;
                     count -= n;
                 }

@@ -34,20 +34,21 @@
 // allow 'force' mount of damaged or unrecognizable volumes
 // allow output redirection
 // allow reading commands from a file
+// allow demand-loading from non-compressed disk image files rather than pre-loading entire file
 // add support for FAT12 volumes
 // add support for FAT16 volumes
 // add support for CP/M disk images
 // add support for ISO-9660 volumes
+// add support for 7-Zip files (.7z)
 // add support for ZIP files
-// add support for compressed files (.Z)
 // add support for tar files
+// add support for compressed files (.Z)
 
 
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-using System.Reflection;
 using System.Text;
 
 namespace FSX
@@ -77,7 +78,6 @@ namespace FSX
         static public Int32 Verbose = 1;
         static public Int32 DebugLevel = 0;
 
-        static private List<FileSystem.TestDelegate> Tests = new List<FileSystem.TestDelegate>();
         static private Dictionary<String, VDE> VolMap = new Dictionary<String, VDE>(StringComparer.OrdinalIgnoreCase);
 
         static void Main(String[] args)
@@ -150,9 +150,6 @@ namespace FSX
                 }
             }
             if (!run) return;
-
-            // register file system handlers
-            RegisterTests();
 
             // import host volumes
             MountHostVolumes();
@@ -302,24 +299,6 @@ namespace FSX
             }
         }
 
-        static void RegisterTests()
-        {
-            foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                foreach (Type t in a.GetTypes())
-                {
-                    if ((typeof(IFileSystemGetTest).IsAssignableFrom(t)) && (!t.IsAbstract))
-                    {
-                        MethodInfo minfo = t.GetMethod("GetTest", BindingFlags.Public|BindingFlags.Static|BindingFlags.DeclaredOnly);
-                        if (minfo == null) continue;
-                        FileSystem.TestDelegate method = minfo.Invoke(null, null) as FileSystem.TestDelegate;
-                        if (method == null) continue;
-                        if (!Tests.Contains(method)) Tests.Add(method);
-                    }
-                }
-            }
-        }
-
         static void MountHostVolumes()
         {
             foreach (DriveInfo d in DriveInfo.GetDrives())
@@ -435,6 +414,7 @@ namespace FSX
                 Console.Error.WriteLine("File Not Found: {0}", s);
                 return null;
             }
+            // TODO: check file extension (or file length) to see if this file is a candidate for demand-loading
             Byte[] data = ((vol.FS != null) && (vol.FS.FullName(path) != null)) ? vol.FS.ReadFile(path) : File.ReadAllBytes(s);
             if ((vol.FS != null) && (vol.FS.FullName(path) != null)) s = String.Concat(vol.Key, ":", vol.FS.FullName(path));
 
@@ -475,6 +455,18 @@ namespace FSX
                             s = String.Format("{0} [{1}{2}]", s, (n >= 0)? "+" : null, FormatNum(n));
                         }
                     }
+                    //else if (opt.StartsWith("type=", StringComparison.OrdinalIgnoreCase))
+                    //{
+                    //    String t = opt.Substring("type=".Length).Trim();
+                    //    Type type = Type.GetType(String.Concat("FSX.", t), false, true);
+                    //    if (type != null)
+                    //    {
+                    //        // invoke type.GetTest() if it exists
+                    //        // call Test method with level 0 to get block size and desired disk type
+                    //        // create disk using requested block size
+                    //        // call type constructor with disk
+                    //    }
+                    //}
                 }
             }
 
@@ -484,14 +476,14 @@ namespace FSX
                 return null;
             }
 
-            // check to see if file content needs to be pre-processed
-            if (path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase))
+            // try to identify storage format based on file extension
+            if ((path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)) && (data.Length > 18) && (data[0] == 0x1f) && (data[1] == 0x8b))
             {
                 // gzip compressed data
                 data = DecompressGZip(data);
                 path = path.Substring(0, path.Length - 3);
             }
-            if ((path.EndsWith(".imd", StringComparison.OrdinalIgnoreCase)) && (IndexOf(Encoding.ASCII, "IMD ", data, 0, 4) == 0))
+            if ((path.EndsWith(".imd", StringComparison.OrdinalIgnoreCase)) && (data.Length > 31) && (IndexOf(Encoding.ASCII, "IMD ", data, 0, 4) == 0))
             {
                 // ImageDisk .IMD image file
                 CHSDisk d = CHSDisk.LoadIMD(s, data);
@@ -550,12 +542,16 @@ namespace FSX
                 }
             }
 
-            // attempt to identify the disk type based on the image file data
+            // try to identify storage format based on image data
             return LoadFS(s, data);
         }
 
         static FileSystem LoadFS(String source, Byte[] data)
         {
+            // try to identify storage format based on image data content
+            // TODO: look for magic numbers or file headers (incl. above in case extension was lost due to renaming)
+
+            // try to identify storage format based on image data size
             if (data.Length == 174848) // 35 tracks, 683 blocks (Commodore 1541/4040)
             {
                 CHSDisk d = CHSDisk.LoadD64(source, data);
@@ -663,7 +659,7 @@ namespace FSX
                 CHSDisk d = new CHSDisk(source, data, 256, 76, 1, 26);
                 return LoadFS(source, d);
             }
-            else if (data.Length == 512512) // 77 tracks of 26 256-byte sectors (IBM 3740)
+            else if (data.Length == 512512) // 77 tracks of 26 256-byte sectors
             {
                 CHSDisk d = new CHSDisk(source, data, 256, 77, 1, 26);
                 return LoadFS(source, d);
@@ -695,6 +691,14 @@ namespace FSX
                 }
                 return LoadFS(source, d);
             }
+            // DEC RK02/RK03 DECpack
+            //
+            // DEC operating systems typically reserve the last 3 cylinders for bad block
+            // handling, leaving an effective capacity of 200 cylinders, each containing
+            // 2 tracks of 12 512-byte sectors, or a total of 4800 blocks.
+            //
+            // Some operating systems (notably Unix) use all 203 cylinders (4872 blocks)
+            // and therefore require special error-free disk cartridges.
             else if (data.Length == 1228800) // 4800 256-byte sectors (DEC RK02, 3 spare tracks)
             {
                 CHSDisk d = new CHSDisk(source, data, 256, 200, 2, 12);
@@ -715,6 +719,22 @@ namespace FSX
                 CHSDisk d = new CHSDisk(source, data, 512, 203, 2, 12);
                 return LoadFS(source, d);
             }
+            else if ((data.Length % 513 == 0) && (data.Length % 512 == 0))
+            {
+                // these might be 512-byte blocks with 1 added error/status byte
+                LBADisk d1 = new LBADisk(source, data, 512);
+                Int32 n = data.Length / 513;
+                LBADisk d2 = new LBADisk(source, 512, n);
+                for (Int32 i = 0; i < n; i++) d2[i].CopyFrom(data, i * 513, 0, 512);
+                return Test.Check(new Disk[] { d1, d2 });
+            }
+            else if (data.Length % 513 == 0) // assume 512-byte blocks with error/status bytes
+            {
+                Int32 n = data.Length / 513;
+                LBADisk d = new LBADisk(source, 512, n);
+                for (Int32 i = 0; i < n; i++) d[i].CopyFrom(data, i * 513, 0, 512);
+                return LoadFS(source, d);
+            }
             else if (data.Length % 512 == 0) // some number of 512-byte blocks
             {
                 LBADisk d = new LBADisk(source, data, 512);
@@ -726,91 +746,38 @@ namespace FSX
 
         static FileSystem LoadFS(String source, Disk image)
         {
-            // try to provide each file system test with a disk with the correct block size
-            Dictionary<FileSystem.TestDelegate, Disk> D = new Dictionary<FileSystem.TestDelegate, Disk>();
-            Int32 size = -1;
-            Type type = null;
-            Int32 level = 0; // entries in D have passed this level
-            foreach (FileSystem.TestDelegate test in Tests)
+            if (image is CHSDisk)
             {
-                if (test(image, level, out size, out type))
+                CHSDisk disk = image as CHSDisk;
+                if ((disk.MaxCylinder < 80) && (disk.MinHead == disk.MaxHead) && (disk.MaxSector(disk.MinCylinder, disk.MinHead) == 26) && (disk.BlockSize == 128 || disk.BlockSize == 256))
                 {
-                    Debug(2, "Pass: {0} level {1:D0}", test.Method.DeclaringType.Name, level);
-                    D.Add(test, image);
-                    continue;
+                    // DEC RX01 Floppy - IBM 3740 format (8" SSSD diskette, 77 tracks, 26 sectors)
+                    // DEC RX02 Floppy - like RX01 format, but using MFM for sector data (not FM)
+                    //
+                    // DEC operating systems typically do not use track 0, so an RX01/RX02 diskette
+                    // has an effective capacity of 76 tracks (2002 sectors).
+                    //
+                    // 'Soft' Interleave imposes a 'logical' sector order on top of the physical
+                    // sector order.  This enables the performance benefits of optimal interleave
+                    // using 'standard' 1:1 interleave diskettes, maintaining interoperability for
+                    // data transfer with other systems, and removing the need to reformat disks.
+                    // 'Soft' sector interleave is 2:1, with a 6 sector track-to-track skew.
+                    Debug(2, "RX01/RX02 image, also testing with interleave applied");
+                    Int32 n = 512 / disk.BlockSize;
+                    Disk d2 = new ClusteredDisk(new InterleavedDisk(disk, 2, 0, 6, 26), n, 26); // if image includes track 0
+                    Disk d3 = new ClusteredDisk(new InterleavedDisk(disk, 2, 0, 6, 0), n, 0); // if image starts at track 1
+                    return Test.Check(new Disk[] { disk, d2, d3 });
                 }
-                if ((size != -1) && (size != image.BlockSize) && ((size % image.BlockSize) == 0))
+                if ((disk.MaxCylinder < 80) && (disk.MinHead == disk.MaxHead) && (disk.MaxSector(disk.MinCylinder, disk.MinHead) == 10) && (disk.BlockSize == 512))
                 {
-                    Disk disk = new ClusteredDisk(image, size / image.BlockSize, 0);
-                    if (test(disk, 0, out size, out type))
-                    {
-                        Debug(2, "Pass: {0} level {1:D0} (with ClusteredDisk)", test.Method.DeclaringType.Name, level);
-                        D.Add(test, disk);
-                        continue;
-                    }
+                    // DEC RX50 Floppy - 5.25" SSDD diskette, 80 tracks, 10 sectors
+                    // 'Soft' sector interleave is 2:1, with a 2 sector track-to-track skew.
+                    Debug(2, "RX50 image, also testing with interleave applied");
+                    Disk d2 = new InterleavedDisk(disk, 2, 0, 2, 0);
+                    return Test.Check(new Disk[] { disk, d2 });
                 }
             }
-
-            // if there were any candidates that passed level 0, continue to try them
-            FileSystem fs;
-            if (D.Count != 0)
-            {
-                while (true)
-                {
-                    level++;
-                    FileSystem.TestDelegate test = null;
-                    Disk disk = null;
-                    Dictionary<FileSystem.TestDelegate, Disk> D2 = new Dictionary<FileSystem.TestDelegate, Disk>();
-                    foreach (KeyValuePair<FileSystem.TestDelegate, Disk> entry in D)
-                    {
-                        test = entry.Key;
-                        disk = entry.Value;
-                        Int32 s;
-                        Type t;
-                        if (test(disk, level, out s, out t))
-                        {
-                            Debug(2, "Pass: {0} level {1:D0}", test.Method.DeclaringType.Name, level);
-                            size = s;
-                            type = t;
-                            D2.Add(test, disk);
-                        }
-                    }
-                    if ((level > 1) && (D2.Count == 1))
-                    {
-                        // if only one test passed (and we got past level 1), choose that type
-                        if ((size != -1) && (size != disk.BlockCount)) disk = new PaddedDisk(disk, size - disk.BlockCount);
-                        fs = ConstructFS(type, disk);
-                        if (fs != null) return fs;
-                    }
-                    else if (D2.Count == 0)
-                    {
-                        // if no test passed this round, the result is indeterminate
-                        level--; // D still has previous round's results
-                        break;
-                    }
-                    D = D2;
-                }
-            }
-
-            // TODO: if D is non-empty, see if any use can be made of the knowledge
-            // that entries in D all passed at least level 'level' tests
-
-            fs = DEC.Try(image);
-            if (fs != null) return fs;
-
-            return null;
-        }
-
-        // call the constructor for 'type', passing in 'image'
-        static FileSystem ConstructFS(Type type, Disk image)
-        {
-            Type[] argTypes = new Type[1]; // constructor parameter types
-            argTypes[0] = image.GetType();
-            ConstructorInfo cinfo = type.GetConstructor(argTypes);
-            if (cinfo == null) return null; // this fs type doesn't have a constructor accepting this disk type
-            Object[] args = new Object[1]; // constructor arguments
-            args[0] = image;
-            return cinfo.Invoke(args) as FileSystem;
+            return Test.Check(new Disk[] { image });
         }
 
         static Byte[] DecompressGZip(Byte[] data)

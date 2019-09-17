@@ -484,6 +484,7 @@ namespace FSX
         // note: levels 3 and 4 are reversed because this makes more sense for RT-11 volumes
         public static Boolean Test(Disk disk, Int32 level, out Int32 size, out Type type)
         {
+            Program.Debug(2, "RT11.Test: level={0:D0} source={1}", level, disk.Source);
             // level 0 - check basic disk parameters (return required block size and disk type)
             size = 512;
             type = typeof(Disk);

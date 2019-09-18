@@ -33,8 +33,8 @@
 // improve argument parsing
 // improve 'force' mount of damaged or unrecognizable volumes
 // allow output redirection
-// allow reading commands from a file
 // allow demand-loading from non-compressed disk image files rather than pre-loading entire file
+// add support for 'raw' volumes (to facilitate examination of unrecognized volumes)
 // add support for FAT12 volumes
 // add support for FAT16 volumes
 // add support for CP/M disk images
@@ -155,18 +155,43 @@ namespace FSX
             MountHostVolumes();
 
             // command loop
-            while (run)
+            CommandLoop(Console.In);
+        }
+
+        static void MountHostVolumes()
+        {
+            foreach (DriveInfo d in DriveInfo.GetDrives())
+            {
+                if (!d.IsReady) continue;
+                String s = d.Name;
+                if (s.EndsWith(@"\")) s = s.Substring(0, s.Length - 1);
+                if (s.EndsWith(@":")) s = s.Substring(0, s.Length - 1);
+                VDE v = new VDE(s, new HostFS(d.Name, d.DriveFormat));
+                VolMap.Add(v.Key, v);
+                if (Vol.Key == null) Vol = v;
+                Console.Error.WriteLine("{0}: = {1} [{2}]", s, d.Name, v.FS.Type);
+            }
+        }
+
+        static void CommandLoop(TextReader input)
+        {
+            while (true)
             {
                 String cmd, arg;
                 Console.Error.Write("\nFSX>");
-                if (!ReadCommand(out cmd, out arg))
+                if (!ReadCommand(input, out cmd, out arg))
                 {
                     Console.Error.WriteLine();
-                    run = false;
+                    return;
                 }
                 else if ((cmd == "exit") || (cmd == "quit"))
                 {
-                    run = false;
+                    return;
+                }
+                else if ((cmd == "source") || (cmd == "."))
+                {
+                    StreamReader file = new StreamReader(arg);
+                    CommandLoop(file);
                 }
                 else if (cmd == "help")
                 {
@@ -184,7 +209,7 @@ namespace FSX
                 }
                 else if ((cmd == "vols") || (cmd == "volumes"))
                 {
-                    String fmt = (Verbose == 0) ? "{0}:" : "{0}:\t{1}\t{2}"; 
+                    String fmt = (Verbose == 0) ? "{0}:" : "{0}:\t{1}\t{2}";
                     foreach (VDE v in VolMap.Values)
                     {
                         Out.WriteLine(fmt, v.Key, v.FS.Type, v.FS.Source);
@@ -192,6 +217,7 @@ namespace FSX
                 }
                 else if (cmd == "test")
                 {
+                    // allow a volume to be tested without attempting to mount it
                 }
                 else if ((cmd == "load") || (cmd == "mount"))
                 {
@@ -299,31 +325,17 @@ namespace FSX
             }
         }
 
-        static void MountHostVolumes()
-        {
-            foreach (DriveInfo d in DriveInfo.GetDrives())
-            {
-                if (!d.IsReady) continue;
-                String s = d.Name;
-                if (s.EndsWith(@"\")) s = s.Substring(0, s.Length - 1);
-                if (s.EndsWith(@":")) s = s.Substring(0, s.Length - 1);
-                VDE v = new VDE(s, new HostFS(d.Name, d.DriveFormat));
-                VolMap.Add(v.Key, v);
-                if (Vol.Key == null) Vol = v;
-                Console.Error.WriteLine("{0}: = {1} [{2}]", s, d.Name, v.FS.Type);
-            }
-        }
-
-        static Boolean ReadCommand(out String command, out String arg)
+        static Boolean ReadCommand(TextReader input, out String command, out String arg)
         {
             // read one line
-            String line = Console.In.ReadLine();
+            String line = input.ReadLine();
             if (line == null)
             {
                 command = null;
                 arg = null;
                 return false;
             }
+            if (input != Console.In) Console.Error.WriteLine(line); // echo if reading from file
 
             // remove leading white space
             Int32 p = 0;
@@ -821,8 +833,9 @@ namespace FSX
             Out.WriteLine("  save|write [id:]file pathname - export image of file 'file' to file 'pathname'");
             Out.WriteLine("  verb|verbose n - set verbosity level (default 0)");
             Out.WriteLine("  deb|debug n - set debug level (default 0)");
+            Out.WriteLine("  source|. pathname - read commands from 'pathname'");
             Out.WriteLine("  help - show this text");
-            Out.WriteLine("  exit|quit - exit program");
+            Out.WriteLine("  exit|quit - exit program (or stop reading 'source' commands)");
             Out.WriteLine();
             Out.WriteLine("load/mount options:");
             Out.WriteLine("  <skip=num> - skip first 'num' bytes of 'pathname'");

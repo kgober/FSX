@@ -738,7 +738,14 @@ namespace FSX
             {
                 Int32 n = data.Length / 513;
                 LBADisk d = new LBADisk(source, 512, n);
-                for (Int32 i = 0; i < n; i++) d[i].CopyFrom(data, i * 513, 0, 512);
+                Int32 p = 0;
+                for (Int32 i = 0; i < n; i++)
+                {
+                    Sector S = d[i] as Sector;
+                    S.CopyFrom(data, p, 0, 512);
+                    p += 512;
+                    S.ErrorCode = data[p++];
+                }
                 return LoadFS(source, d);
             }
             else if (data.Length % 512 == 0) // some number of 512-byte blocks

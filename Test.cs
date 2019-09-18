@@ -108,6 +108,22 @@ namespace FSX
             }
         }
 
+        public static Boolean GetInfo(String typeName, out Int32 blockSize, out Type diskType)
+        {
+            blockSize = -1;
+            diskType = null;
+            if ((typeName == null) || (typeName.Length == 0)) return false;
+            if (!typeName.StartsWith("FSX.", StringComparison.OrdinalIgnoreCase)) typeName = String.Concat("FSX.", typeName);
+            Type type = Type.GetType(typeName, false, true);
+            if ((type == null) || !(typeof(IFileSystemGetTest).IsAssignableFrom(type)) || (type.IsAbstract)) return false;
+            MethodInfo minfo = type.GetMethod("GetTest", BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
+            if (minfo == null) return false;
+            FileSystem.TestDelegate method = minfo.Invoke(null, null) as FileSystem.TestDelegate;
+            if (method == null) return false;
+            method(null, 0, out blockSize, out diskType);
+            return true;
+        }
+
         public static FileSystem Check(Disk[] images)
         {
             if (sTests == null) Init();
@@ -183,8 +199,16 @@ namespace FSX
             return null;
         }
 
+        // call the constructor for 'typeName', passing in 'image'
+        public static FileSystem ConstructFS(String typeName, Disk image)
+        {
+            if (!typeName.StartsWith("FSX.", StringComparison.OrdinalIgnoreCase)) typeName = String.Concat("FSX.", typeName);
+            Type type = Type.GetType(typeName, false, true);
+            return (type == null) ? null : ConstructFS(type, image);
+        }
+
         // call the constructor for 'type', passing in 'image'
-        private static FileSystem ConstructFS(Type type, Disk image)
+        public static FileSystem ConstructFS(Type type, Disk image)
         {
             Type[] argTypes = new Type[1]; // constructor parameter types
             argTypes[0] = image.GetType();

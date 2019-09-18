@@ -31,7 +31,7 @@
 // Future Improvements / To Do
 // improve exception handling
 // improve argument parsing
-// allow 'force' mount of damaged or unrecognizable volumes
+// improve 'force' mount of damaged or unrecognizable volumes
 // allow output redirection
 // allow reading commands from a file
 // allow demand-loading from non-compressed disk image files rather than pre-loading entire file
@@ -417,6 +417,11 @@ namespace FSX
             // TODO: check file extension (or file length) to see if this file is a candidate for demand-loading
             Byte[] data = ((vol.FS != null) && (vol.FS.FullName(path) != null)) ? vol.FS.ReadFile(path) : File.ReadAllBytes(s);
             if ((vol.FS != null) && (vol.FS.FullName(path) != null)) s = String.Concat(vol.Key, ":", vol.FS.FullName(path));
+            if (data.Length == 0)
+            {
+                Console.Error.WriteLine("Empty File: {0}", s);
+                return null;
+            }
 
             // process options
             while (opts.Length != 0)
@@ -455,25 +460,26 @@ namespace FSX
                             s = String.Format("{0} [{1}{2}]", s, (n >= 0)? "+" : null, FormatNum(n));
                         }
                     }
-                    //else if (opt.StartsWith("type=", StringComparison.OrdinalIgnoreCase))
-                    //{
-                    //    String t = opt.Substring("type=".Length).Trim();
-                    //    Type type = Type.GetType(String.Concat("FSX.", t), false, true);
-                    //    if (type != null)
-                    //    {
-                    //        // invoke type.GetTest() if it exists
-                    //        // call Test method with level 0 to get block size and desired disk type
-                    //        // create disk using requested block size
-                    //        // call type constructor with disk
-                    //    }
-                    //}
+                    else if (opt.StartsWith("type=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // this should probably be split into, e.g. <disk=CHS(77,1,26)> <fs=RT11>
+                        String t = opt.Substring("type=".Length).Trim();
+                        Int32 size;
+                        Type type;
+                        if (Test.GetInfo(t, out size, out type))
+                        {
+                            if ((type == typeof(LBADisk)) || (type == typeof(Disk)))
+                            {
+                                Disk disk = new LBADisk(s, data, size);
+                                return Test.ConstructFS(t, disk);
+                            }
+                            else if (type == typeof(CHSDisk))
+                            {
+                                // no good way to guess what C/H/S values to use
+                            }
+                        }
+                    }
                 }
-            }
-
-            if (data.Length == 0)
-            {
-                Console.Error.WriteLine("Empty File: {0}", s);
-                return null;
             }
 
             // try to identify storage format based on file extension
@@ -814,6 +820,7 @@ namespace FSX
             Out.WriteLine("load/mount options:");
             Out.WriteLine("  <skip=num> - skip first 'num' bytes of 'pathname'");
             Out.WriteLine("  <pad=num> - pad end of 'pathname' with 'num' zero bytes");
+            Out.WriteLine("  <type=name> - mount as a file system of type 'name'");
         }
 
         static Int32 ParseNum(String value, Int32 defaultValue)

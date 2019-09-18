@@ -34,6 +34,7 @@ namespace FSX
     abstract class Block
     {
         public abstract Int32 Size { get; }
+        public abstract Boolean IsDirty { get; set; }
         public abstract Byte this[Int32 offset] { get; set; }
         public abstract void CopyTo(Byte[] targetBuffer, Int32 targetOffset);
         public abstract void CopyTo(Byte[] targetBuffer, Int32 targetOffset, Int32 blockOffset, Int32 count);
@@ -76,6 +77,7 @@ namespace FSX
         private Byte[] mData;
         private Int32 mID;      // range: 0-2147483647
         private Int32 mErr;
+        private Boolean mDirty;
 
         public Sector(Int32 id, Byte[] data, Int32 index, Int32 count)
         {
@@ -116,10 +118,16 @@ namespace FSX
             get { return mData.Length; }
         }
 
+        public override bool IsDirty
+        {
+            get { return mDirty; }
+            set { mDirty = value; }
+        }
+
         public override Byte this[Int32 offset]
         {
             get { return mData[offset]; }
-            set { mData[offset] = value; }
+            set { mDirty |= (mData[offset] != value); mData[offset] = value; }
         }
 
         public override void CopyTo(Byte[] targetBuffer, Int32 targetOffset)
@@ -134,7 +142,13 @@ namespace FSX
 
         public override void CopyFrom(Byte[] sourceBuffer, Int32 sourceOffset, Int32 blockOffset, Int32 count)
         {
-            for (Int32 i = 0; i < count; i++) mData[blockOffset++] = sourceBuffer[sourceOffset++];
+            Boolean f = false;
+            for (Int32 i = 0; i < count; i++)
+            {
+                f |= (mData[blockOffset] != sourceBuffer[sourceOffset]);
+                mData[blockOffset++] = sourceBuffer[sourceOffset++];
+            }
+            mDirty |= f;
         }
 
         public override Byte ToByte(Int32 startIndex)
@@ -673,6 +687,7 @@ namespace FSX
         {
             private Block[] mData;
             private Int32 mBlockSize;
+            private Boolean mDirty;
 
             public Cluster(Block[] blocks)
             {
@@ -685,10 +700,16 @@ namespace FSX
                 get { return mData.Length * mBlockSize; }
             }
 
+            public override Boolean IsDirty
+            {
+                get { return mDirty; }
+                set { mDirty = value; }
+            }
+
             public override Byte this[Int32 offset]
             {
                 get { return mData[offset / mBlockSize][offset % mBlockSize]; }
-                set { mData[offset / mBlockSize][offset % mBlockSize] = value; }
+                set { mDirty |= (mData[offset / mBlockSize][offset % mBlockSize] != value); mData[offset / mBlockSize][offset % mBlockSize] = value; }
             }
 
             public override void CopyTo(Byte[] targetBuffer, Int32 targetOffset)
@@ -723,7 +744,9 @@ namespace FSX
                 {
                     Int32 n = mBlockSize - blockOffset; // number of bytes available to copy in block
                     if (count < n) n = count;
-                    mData[i++].CopyFrom(sourceBuffer, sourceOffset, blockOffset, n);
+                    Boolean f = mData[i].IsDirty;
+                    mData[i].CopyFrom(sourceBuffer, sourceOffset, blockOffset, n);
+                    mDirty |= (f != mData[i++].IsDirty);
                     sourceOffset += n;
                     blockOffset = 0;
                     count -= n;

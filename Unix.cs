@@ -362,7 +362,7 @@ namespace FSX
         }
     }
 
-    partial class Unix : IFileSystemGetTest
+    partial class Unix : IFileSystemAuto
     {
         public static TestDelegate GetTest()
         {

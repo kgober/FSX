@@ -353,7 +353,7 @@ namespace FSX
         }
     }
 
-    partial class CBMDOS : IFileSystemGetTest
+    partial class CBMDOS : IFileSystemAuto
     {
         public static TestDelegate GetTest()
         {

@@ -467,7 +467,7 @@ namespace FSX
         }
     }
 
-    partial class RT11 : IFileSystemGetTest
+    partial class RT11 : IFileSystemAuto
     {
         public static TestDelegate GetTest()
         {

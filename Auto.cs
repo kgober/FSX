@@ -1,4 +1,4 @@
-// Test.cs
+// Auto.cs
 // Copyright © 2019 Kenneth Gober
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,13 +21,13 @@
 
 
 // To facilitate accessing disks whose file system type is unknown, each FileSystem
-// may provide a test method that can be used to check for the presence of on-disk
+// may provide a Test method that can be used to check for the presence of on-disk
 // data structures in increasing levels of detail, until the file system type and size
 // can be reliably inferred.  Each FileSystem that supports this should implement the
-// IFileSystemGetTest interface, with the implementing class containing a public static
+// IFileSystemAuto interface, with the implementing class containing a public static
 // GetTest() method that returns a 'TestDelegate'.  When the program needs to identify
 // a file system type, it will invoke TestDelegate as needed:
-// Boolean TestDelegate(Disk disk, Int32 level, out Int32 size, out Type type);
+//   Boolean TestDelegate(Disk disk, Int32 level, out Int32 size, out Type type);
 //
 // To enable comparison of Test results, 'level' should be defined as follows:
 //  0 - check basic disk parameters (return required block size and disk type)
@@ -55,7 +55,7 @@
 // or stored on the disk controller rather than on the disk itself.  For levels 2
 // and higher a size of -1 means the size can't be determined without examining the
 // disk image at a higher level (e.g., the RT-11 home block doesn't include the
-// volume size, so a level 3 check is required).  
+// volume size, so a level 3 check is required).
 
 
 using System;
@@ -64,7 +64,7 @@ using System.Reflection;
 
 namespace FSX
 {
-    interface IFileSystemGetTest
+    interface IFileSystemAuto
     {
     }
 
@@ -73,7 +73,7 @@ namespace FSX
         public delegate Boolean TestDelegate(Disk disk, Int32 level, out Int32 size, out Type type);
     }
 
-    class Test
+    class Auto
     {
         private struct Entry
         {
@@ -96,7 +96,7 @@ namespace FSX
             {
                 foreach (Type t in a.GetTypes())
                 {
-                    if ((typeof(IFileSystemGetTest).IsAssignableFrom(t)) && (!t.IsAbstract))
+                    if ((typeof(IFileSystemAuto).IsAssignableFrom(t)) && (!t.IsAbstract))
                     {
                         MethodInfo minfo = t.GetMethod("GetTest", BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
                         if (minfo == null) continue;
@@ -115,7 +115,7 @@ namespace FSX
             if ((typeName == null) || (typeName.Length == 0)) return false;
             if (!typeName.StartsWith("FSX.", StringComparison.OrdinalIgnoreCase)) typeName = String.Concat("FSX.", typeName);
             Type type = Type.GetType(typeName, false, true);
-            if ((type == null) || !(typeof(IFileSystemGetTest).IsAssignableFrom(type)) || (type.IsAbstract)) return false;
+            if ((type == null) || !(typeof(IFileSystemAuto).IsAssignableFrom(type)) || (type.IsAbstract)) return false;
             MethodInfo minfo = type.GetMethod("GetTest", BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
             if (minfo == null) return false;
             FileSystem.TestDelegate method = minfo.Invoke(null, null) as FileSystem.TestDelegate;

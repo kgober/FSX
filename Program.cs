@@ -478,12 +478,12 @@ namespace FSX
                         String t = opt.Substring("type=".Length).Trim();
                         Int32 size;
                         Type type;
-                        if (Test.GetInfo(t, out size, out type))
+                        if (Auto.GetInfo(t, out size, out type))
                         {
                             if ((type == typeof(LBADisk)) || (type == typeof(Disk)))
                             {
                                 Disk disk = new LBADisk(s, data, size);
-                                return Test.ConstructFS(t, disk);
+                                return Auto.ConstructFS(t, disk);
                             }
                             else if (type == typeof(CHSDisk))
                             {
@@ -744,7 +744,7 @@ namespace FSX
                 Int32 n = data.Length / 513;
                 LBADisk d2 = new LBADisk(source, 512, n);
                 for (Int32 i = 0; i < n; i++) d2[i].CopyFrom(data, i * 513, 0, 512);
-                return Test.Check(new Disk[] { d1, d2 });
+                return Auto.Check(new Disk[] { d1, d2 });
             }
             else if (data.Length % 513 == 0) // assume 512-byte blocks with error/status bytes
             {
@@ -791,7 +791,7 @@ namespace FSX
                     Int32 n = 512 / disk.BlockSize;
                     Disk d2 = new ClusteredDisk(new InterleavedDisk(disk, 2, 0, 6, 26), n, 26); // if image includes track 0
                     Disk d3 = new ClusteredDisk(new InterleavedDisk(disk, 2, 0, 6, 0), n, 0); // if image starts at track 1
-                    return Test.Check(new Disk[] { disk, d2, d3 });
+                    return Auto.Check(new Disk[] { disk, d2, d3 });
                 }
                 if ((disk.MaxCylinder < 80) && (disk.MinHead == disk.MaxHead) && (disk.MaxSector(disk.MinCylinder, disk.MinHead) == 10) && (disk.BlockSize == 512))
                 {
@@ -799,10 +799,10 @@ namespace FSX
                     // 'Soft' sector interleave is 2:1, with a 2 sector track-to-track skew.
                     Debug(2, "RX50 image, also testing with interleave applied");
                     Disk d2 = new InterleavedDisk(disk, 2, 0, 2, 0);
-                    return Test.Check(new Disk[] { disk, d2 });
+                    return Auto.Check(new Disk[] { disk, d2 });
                 }
             }
-            return Test.Check(new Disk[] { image });
+            return Auto.Check(new Disk[] { image });
         }
 
         static Byte[] DecompressGZip(Byte[] data)

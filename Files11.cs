@@ -734,7 +734,7 @@ namespace FSX
         }
     }
 
-    partial class ODS1 : IFileSystemGetTest
+    partial class ODS1 : IFileSystemAuto
     {
         public static TestDelegate GetTest()
         {

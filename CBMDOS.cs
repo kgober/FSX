@@ -78,12 +78,12 @@ namespace FSX
             }
         }
 
-        private Disk mDisk;
+        private Volume mDisk;
         private String mType;
         private Int32 mDirTrack;
         private Int32 mBlocksFree;
 
-        public CBMDOS(CHSDisk disk)
+        public CBMDOS(CHSVolume disk)
         {
             mDisk = disk;
             mDirTrack = (disk.MaxCylinder <= 42) ? 18 : 39;
@@ -94,7 +94,7 @@ namespace FSX
             mBlocksFree = CountFreeBlocks();
         }
 
-        public override Disk Disk
+        public override Volume Disk
         {
             get { return mDisk; }
         }
@@ -170,7 +170,7 @@ namespace FSX
                         Char lf = ((b & 0x40) != 0) ? '>' : ' ';
                         Char cf = ((b & 0x80) != 0) ? ' ' : '*';
                         fn = String.Concat("\"", fn, "\"");
-                        Int32 sz = B.ToUInt16(bp + 28);
+                        Int32 sz = B.GetUInt16L(bp + 28);
                         output.WriteLine("{0,-4:D0} {1,-18}{2}{3}{4}", sz, fn, lf, ft, cf);
                     }
                 }
@@ -368,14 +368,14 @@ namespace FSX
         // level 5 - check file header allocation (return volume size and type)
         // level 6 - check data block allocation (return volume size and type)
         // note: levels 3 and 4 are reversed because this makes more sense for CBMDOS volumes
-        public static Boolean Test(Disk dsk, Int32 level, out Int32 size, out Type type)
+        public static Boolean Test(Volume dsk, Int32 level, out Int32 size, out Type type)
         {
             // level 0 - check basic disk parameters (return required block size and disk type)
             size = 256;
-            type = typeof(CHSDisk);
+            type = typeof(CHSVolume);
             if (dsk == null) return false;
-            if (!(dsk is CHSDisk)) return Program.Debug(false, 1, "CBMDOS.Test: disk must be track-oriented (e.g. 'CHSDisk')");
-            CHSDisk disk = dsk as CHSDisk;
+            if (!(dsk is CHSVolume)) return Program.Debug(false, 1, "CBMDOS.Test: disk must be track-oriented (e.g. 'CHSDisk')");
+            CHSVolume disk = dsk as CHSVolume;
             if (disk.BlockSize != size) return Program.Debug(false, 1, "CBMDOS.Test: invalid block size (is {0:D0}, require {1:D0})", disk.BlockSize, size);
             if (disk.MinHead != disk.MaxHead) return Program.Debug(false, 1, "CBMDOS.Test: disk must be logically single-sided");
             if (disk.MinCylinder < 1) return Program.Debug(false, 1, "CBMDOS.Test: disk track numbering must start at 1 (is {0:D0})", disk.MinCylinder);
@@ -386,7 +386,7 @@ namespace FSX
             if (level == 1)
             {
                 size = -1;
-                type = typeof(CHSDisk);
+                type = typeof(CHSVolume);
                 return true;
             }
 
@@ -398,7 +398,7 @@ namespace FSX
             Int32 s = 0;
             Track T = GetTrack(disk, t);
             if (T == null) return Program.Debug(false, 1, "CBMDOS.Test: disk image does not include directory track {0:D0}", t);
-            Block B = T[s];
+            Block B = T.Sector(s);
             if (B == null) return Program.Debug(false, 1, "CBMDOS.Test: disk image does not include directory header block {0:D0}/{1:D0}", t, s);
             Byte fmt = B[2];
             if ((fmt != 0x01) && (fmt != 0x41) && (fmt != 0x43)) return Program.Debug(false, 1, "CBMDOS.Test: BAM format byte invalid (is 0x{0:x2}, expect 0x01, 0x41, or 0x43)", fmt);
@@ -433,7 +433,7 @@ namespace FSX
                 sc++;
                 T = GetTrack(disk, t);
                 if (T == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid directory chain at segment {0:D0}: track not found for {1:D0}/{2:D0}", sc, t, s);
-                B = T[s];
+                B = T.Sector(s);
                 if (B == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid directory chain at segment {0:D0}: sector not found for {1:D0}/{2:D0}", sc, t, s);
                 if (BMap[t, s] != 0) return Program.Debug(false, 1, "CBMDOS.Test: invalid directory chain at segment {0:D0}: cycle detected at {1:D0}/{2:D0}", sc, t, s);
                 BMap[t, s] = sc;
@@ -480,7 +480,7 @@ namespace FSX
             s = 1;
             while (t != 0)
             {
-                B = GetTrack(disk, t)[s];
+                B = GetTrack(disk, t).Sector(s);
                 Int32 l = (B[0] == 0) ? B[1] + 1 : B.Size; // where this block's data ends
                 for (Int32 bp = 2; bp < l; bp += 32)
                 {
@@ -491,7 +491,7 @@ namespace FSX
                     //Boolean fSaveAt = ((b & 0x20) != 0);
                     Int32 fType = b & 0x1f;
                     if (fType > 4) return Program.Debug(false, 1, "CBMDOS.Test: invalid file type in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, require 0 <= n <= 4)", t, s, bp, fType);
-                    Int32 n = B.ToUInt16(bp + 28); // file block count
+                    Int32 n = B.GetUInt16L(bp + 28); // file block count
                     if (n > (size - sc)) return Program.Debug(false, 1, "CBMDOS.Test: invalid block count in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect n <= {4:D0})", t, s, bp, n, size - sc);
                     Int32 ft = B[bp + 1]; // track of first block
                     Int32 fs = B[bp + 2]; // sector of first block
@@ -500,7 +500,7 @@ namespace FSX
                     {
                         ct++;
                         if ((T = GetTrack(disk, ft)) == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid start track in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0} <= n <= {5:D0})", t, s, bp, ft, disk.MinCylinder, disk.MaxCylinder);
-                        if (T[fs] == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid start sector in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0} <= n <= {5:D0})", t, s, bp, fs, T.MinSector, T.MaxSector);
+                        if (T.Sector(fs) == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid start sector in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0} <= n <= {5:D0})", t, s, bp, fs, T.MinSector, T.MaxSector);
                         if (BMap[ft, fs] != 0)
                         {
                             if ((BMap[ft, fs] & 0xffff0000) == fc)
@@ -509,8 +509,8 @@ namespace FSX
                                 return Program.Debug(false, 1, "CBMDOS.Test: invalid block chain for directory entry {0:D0}/{1:D0} 0x{2:x2} (block {3:D0}/{4:D0} is in use by another file)", t, s, bp, ft, fs);
                         }
                         BMap[ft, fs] = fc + ct;
-                        ft = T[fs][0];
-                        fs = T[fs][1];
+                        ft = T.Sector(fs)[0];
+                        fs = T.Sector(fs)[1];
                     }
                     if (n != ct) return Program.Debug(false, 1, "CBMDOS.Test: inconsistent block count in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0})", t, s, bp, n, ct);
                     sc += ct;
@@ -535,7 +535,7 @@ namespace FSX
 
     partial class CBMDOS
     {
-        private static Track GetTrack(CHSDisk disk, Int32 track)
+        private static Track GetTrack(CHSVolume disk, Int32 track)
         {
             if (track < disk.MinCylinder) return null;
             if (track > disk.MaxCylinder) return null;

@@ -70,7 +70,7 @@ namespace FSX
 
     partial class FileSystem
     {
-        public delegate Boolean TestDelegate(Disk disk, Int32 level, out Int32 size, out Type type);
+        public delegate Boolean TestDelegate(Volume disk, Int32 level, out Int32 size, out Type type);
     }
 
     class Auto
@@ -78,9 +78,9 @@ namespace FSX
         private struct Entry
         {
             public FileSystem.TestDelegate Test;
-            public Disk Disk;
+            public Volume Disk;
 
-            public Entry(FileSystem.TestDelegate test, Disk disk)
+            public Entry(FileSystem.TestDelegate test, Volume disk)
             {
                 Test = test;
                 Disk = disk;
@@ -124,7 +124,7 @@ namespace FSX
             return true;
         }
 
-        public static FileSystem Check(Disk[] images)
+        public static FileSystem Check(Volume[] images)
         {
             if (sTests == null) Init();
 
@@ -135,7 +135,7 @@ namespace FSX
             Int32 level = 0; // entries in L have passed this level
             foreach (FileSystem.TestDelegate test in sTests)
             {
-                foreach (Disk image in images)
+                foreach (Volume image in images)
                 {
                     if (test(image, level, out size, out type))
                     {
@@ -145,7 +145,7 @@ namespace FSX
                     }
                     if ((size != -1) && (size != image.BlockSize) && ((size % image.BlockSize) == 0))
                     {
-                        Disk disk = new ClusteredDisk(image, size / image.BlockSize, 0);
+                        Volume disk = new ClusteredVolume(image, size / image.BlockSize, 0);
                         if (test(disk, level, out size, out type))
                         {
                             Program.Debug(2, "Pass: {0} level {1:D0} (with ClusteredDisk)", test.Method.DeclaringType.Name, level);
@@ -162,7 +162,7 @@ namespace FSX
                 while (true)
                 {
                     level++;
-                    Disk disk = null;
+                    Volume disk = null;
                     List<Entry> L2 = new List<Entry>();
                     foreach (Entry e in L)
                     {
@@ -180,7 +180,7 @@ namespace FSX
                     if ((level > 1) && (L2.Count == 1))
                     {
                         // if only one test passed (and we got past level 1), choose that type
-                        if ((size != -1) && (size != disk.BlockCount)) disk = new PaddedDisk(disk, size - disk.BlockCount);
+                        if ((size != -1) && (size != disk.BlockCount)) disk = new PaddedVolume(disk, size - disk.BlockCount);
                         return ConstructFS(type, disk);
                     }
                     else if (L2.Count == 0)
@@ -200,7 +200,7 @@ namespace FSX
         }
 
         // call the constructor for 'typeName', passing in 'image'
-        public static FileSystem ConstructFS(String typeName, Disk image)
+        public static FileSystem ConstructFS(String typeName, Volume image)
         {
             if (!typeName.StartsWith("FSX.", StringComparison.OrdinalIgnoreCase)) typeName = String.Concat("FSX.", typeName);
             Type type = Type.GetType(typeName, false, true);
@@ -208,7 +208,7 @@ namespace FSX
         }
 
         // call the constructor for 'type', passing in 'image'
-        public static FileSystem ConstructFS(Type type, Disk image)
+        public static FileSystem ConstructFS(Type type, Volume image)
         {
             Type[] argTypes = new Type[1]; // constructor parameter types
             argTypes[0] = image.GetType();

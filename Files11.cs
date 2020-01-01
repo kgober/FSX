@@ -118,12 +118,12 @@ namespace FSX
 {
     partial class ODS1 : FileSystem
     {
-        private Disk mDisk;
+        private Volume mDisk;
         private String mDir;
         private UInt16 mDirNum;
         private UInt16 mDirSeq;
 
-        public ODS1(Disk disk)
+        public ODS1(Volume disk)
         {
             mDisk = disk;
             mDir = "[0,0]";
@@ -131,7 +131,7 @@ namespace FSX
             mDirSeq = 4;
         }
 
-        public override Disk Disk
+        public override Volume Disk
         {
             get { return mDisk; }
         }
@@ -229,26 +229,26 @@ namespace FSX
             Byte[] data = ReadFile(dirNum, dirSeq);
             Byte RTYP = H[14];
             Byte RATT = H[15];
-            Int32 n = H.ToUInt16(16);
-            Int32 len = (H.ToUInt16(22) << 16) + H.ToUInt16(24); // VBN where EOF is located
-            len = (len - 1) * 512 + H.ToUInt16(26);
+            Int32 n = H.GetUInt16L(16);
+            Int32 len = (H.GetUInt16L(22) << 16) + H.GetUInt16L(24); // VBN where EOF is located
+            len = (len - 1) * 512 + H.GetUInt16L(26);
             if (RTYP == 0) len = data.Length;
             Int32 bp = 0;
             while (bp < len)
             {
-                UInt16 fnum = BitConverter.ToUInt16(data, bp);
+                UInt16 fnum = Program.ToUInt16L(data, bp);
                 if (fnum != 0)
                 {
-                    String fn1 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 6));
-                    String fn2 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 8));
-                    String fn3 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 10));
-                    String ext = Radix50.Convert(BitConverter.ToUInt16(data, bp + 12));
-                    UInt16 ver = BitConverter.ToUInt16(data, bp + 14);
+                    String fn1 = Radix50.Convert(Program.ToUInt16L(data, bp + 6));
+                    String fn2 = Radix50.Convert(Program.ToUInt16L(data, bp + 8));
+                    String fn3 = Radix50.Convert(Program.ToUInt16L(data, bp + 10));
+                    String ext = Radix50.Convert(Program.ToUInt16L(data, bp + 12));
+                    UInt16 ver = Program.ToUInt16L(data, bp + 14);
                     String fn = String.Format("{0}{1}{2}.{3};{4:D0}", fn1, fn2, fn3, ext, ver);
                     if (RE.IsMatch(fn))
                     {
-                        UInt16 fseq = BitConverter.ToUInt16(data, bp + 2);
-                        UInt16 fvol = BitConverter.ToUInt16(data, bp + 4);
+                        UInt16 fseq = Program.ToUInt16L(data, bp + 2);
+                        UInt16 fvol = Program.ToUInt16L(data, bp + 4);
                         output.WriteLine("{0} ({1:D0},{2:D0},{3:D0})", fn, fnum, fseq, fvol);
                     }
                 }
@@ -316,9 +316,9 @@ namespace FSX
             if (H == null) return;
             Byte RTYP = H[14];
             Byte RATT = H[15];
-            Int32 n = H.ToUInt16(16);
-            Int32 len = (H.ToUInt16(22) << 16) + H.ToUInt16(24); // VBN where EOF is located
-            len = (len - 1) * 512 + H.ToUInt16(26);
+            Int32 n = H.GetUInt16L(16);
+            Int32 len = (H.GetUInt16L(22) << 16) + H.GetUInt16L(24); // VBN where EOF is located
+            len = (len - 1) * 512 + H.GetUInt16L(26);
             Byte[] buf = ReadFile(fileNum, fileSeq);
             if (RTYP == 0)
             {
@@ -372,7 +372,7 @@ namespace FSX
                 p = 0;
                 while (p < len)
                 {
-                    while (((p += 2) <= len) && ((n = BitConverter.ToInt16(buf, p - 2)) != -1))
+                    while (((p += 2) <= len) && ((n = Program.ToInt16L(buf, p - 2)) != -1))
                     {
                         String s = (n == 0) ? String.Empty : encoding.GetString(buf, p, n);
                         if ((RATT & 1) != 0) // FD.FTN
@@ -515,18 +515,18 @@ namespace FSX
                     {
                         lbn = H[p++] << 16;
                         ct = H[p++];
-                        lbn += H.ToUInt16(ref p);
+                        lbn += H.GetUInt16L(ref p);
                     }
                     else if ((CTSZ == 2) && (LBSZ == 2)) // Format 2 (not implemented)
                     {
-                        ct = H.ToUInt16(ref p);
-                        lbn = H.ToUInt16(ref p);
+                        ct = H.GetUInt16L(ref p);
+                        lbn = H.GetUInt16L(ref p);
                     }
                     else if ((CTSZ == 2) && (LBSZ == 4)) // Format3 (not implemented)
                     {
-                        ct = H.ToUInt16(ref p);
-                        lbn = H.ToUInt16(ref p) << 16;
-                        lbn += H.ToUInt16(ref p);
+                        ct = H.GetUInt16L(ref p);
+                        lbn = H.GetUInt16L(ref p) << 16;
+                        lbn += H.GetUInt16L(ref p);
                     }
                     else // unknown format
                     {
@@ -536,8 +536,8 @@ namespace FSX
                     n += ct;
                 }
 
-                UInt16 nf = H.ToUInt16(map + 2);
-                UInt16 ns = H.ToUInt16(map + 4);
+                UInt16 nf = H.GetUInt16L(map + 2);
+                UInt16 ns = H.GetUInt16L(map + 4);
                 H = (nf == 0) ? null : GetFileHeader(nf, ns);
             }
 
@@ -564,18 +564,18 @@ namespace FSX
                     {
                         lbn = H[p++] << 16;
                         ct = H[p++];
-                        lbn += H.ToUInt16(ref p);
+                        lbn += H.GetUInt16L(ref p);
                     }
                     else if ((CTSZ == 2) && (LBSZ == 2)) // Format 2 (not implemented)
                     {
-                        ct = H.ToUInt16(ref p);
-                        lbn = H.ToUInt16(ref p);
+                        ct = H.GetUInt16L(ref p);
+                        lbn = H.GetUInt16L(ref p);
                     }
                     else if ((CTSZ == 2) && (LBSZ == 4)) // Format3 (not implemented)
                     {
-                        ct = H.ToUInt16(ref p);
-                        lbn = H.ToUInt16(ref p) << 16;
-                        lbn += H.ToUInt16(ref p);
+                        ct = H.GetUInt16L(ref p);
+                        lbn = H.GetUInt16L(ref p) << 16;
+                        lbn += H.GetUInt16L(ref p);
                     }
                     else // unknown format
                     {
@@ -588,8 +588,8 @@ namespace FSX
                     }
                 }
 
-                UInt16 nf = H.ToUInt16(map + 2);
-                UInt16 ns = H.ToUInt16(map + 4);
+                UInt16 nf = H.GetUInt16L(map + 2);
+                UInt16 ns = H.GetUInt16L(map + 4);
                 H = (nf == 0) ? null : GetFileHeader(nf, ns);
             }
             return buf;
@@ -600,17 +600,17 @@ namespace FSX
             // RX01 and RX02 images should be written as physical images (including track 0)
             // all other images (including RX50) should be written as logical images
             FileStream f = new FileStream(fileName, FileMode.Create);
-            Disk d = mDisk;
+            Volume d = mDisk;
             Int32 size;
             Type type;
             if (!Test(d, 3, out size, out type)) return false;
             if ((size == 494) || (size == 988)) // RX01 and RX02 sizes
             {
-                Boolean iFlag = (d is InterleavedDisk);
-                while (d.BaseDisk != null)
+                Boolean iFlag = (d is InterleavedVolume);
+                while (d.Base != null)
                 {
-                    d = d.BaseDisk;
-                    if (d is InterleavedDisk) iFlag = true;
+                    d = d.Base;
+                    if (d is InterleavedVolume) iFlag = true;
                 }
                 if (iFlag)
                 {
@@ -698,19 +698,19 @@ namespace FSX
             Int32 bp = 0;
             while (bp < data.Length)
             {
-                UInt16 fnum = BitConverter.ToUInt16(data, bp);
+                UInt16 fnum = Program.ToUInt16L(data, bp);
                 if (fnum != 0)
                 {
-                    String fn1 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 6));
-                    String fn2 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 8));
-                    String fn3 = Radix50.Convert(BitConverter.ToUInt16(data, bp + 10));
-                    String ext = Radix50.Convert(BitConverter.ToUInt16(data, bp + 12));
-                    UInt16 ver = BitConverter.ToUInt16(data, bp + 14);
+                    String fn1 = Radix50.Convert(Program.ToUInt16L(data, bp + 6));
+                    String fn2 = Radix50.Convert(Program.ToUInt16L(data, bp + 8));
+                    String fn3 = Radix50.Convert(Program.ToUInt16L(data, bp + 10));
+                    String ext = Radix50.Convert(Program.ToUInt16L(data, bp + 12));
+                    UInt16 ver = Program.ToUInt16L(data, bp + 14);
                     String fn = String.Format("{0}{1}{2}.{3};{4:D0}", fn1, fn2, fn3, ext, ver);
                     if (RE.IsMatch(fn))
                     {
                         fileNum = fnum;
-                        fileSeq = BitConverter.ToUInt16(data, bp + 2);
+                        fileSeq = Program.ToUInt16L(data, bp + 2);
                         fn = String.Concat(fn1, fn2, fn3);
                         while (fn.EndsWith(" ")) fn = fn.Substring(0, fn.Length - 1);
                         while (ext.EndsWith(" ")) ext = ext.Substring(0, ext.Length - 1);
@@ -729,7 +729,7 @@ namespace FSX
         private Block GetFileHeader(UInt16 fileNum, UInt16 seqNum)
         {
             Block H = GetFileHeader(mDisk, fileNum);
-            if ((H != null) && (H.ToUInt16(2) == fileNum) && (H.ToUInt16(4) == seqNum)) return H;
+            if ((H != null) && (H.GetUInt16L(2) == fileNum) && (H.GetUInt16L(4) == seqNum)) return H;
             return null;
         }
     }
@@ -748,13 +748,13 @@ namespace FSX
         // level 4 - check directory structure (return volume size and type)
         // level 5 - check file header allocation (return volume size and type)
         // level 6 - check data block allocation (return volume size and type)
-        public static Boolean Test(Disk disk, Int32 level, out Int32 size, out Type type)
+        public static Boolean Test(Volume disk, Int32 level, out Int32 size, out Type type)
         {
             if (disk == null) throw new ArgumentNullException("disk");
 
             // level 0 - check basic disk parameters (return required block size and disk type)
             size = 512;
-            type = typeof(Disk);
+            type = typeof(Volume);
             if (disk == null) return false;
             if (disk.BlockSize != size) return Program.Debug(false, 1, "ODS1.Test: invalid block size (is {0:D0}, require {1:D0})", disk.BlockSize, size);
             if (level == 0) return true;
@@ -763,7 +763,7 @@ namespace FSX
             if (level == 1)
             {
                 size = -1;
-                type = typeof(Disk);
+                type = typeof(Volume);
                 if (disk.BlockCount < 1) return Program.Debug(false, 1, "ODS1.Test: disk too small to contain boot block");
                 return true;
             }
@@ -775,18 +775,18 @@ namespace FSX
             Block HB = disk[1];
             if (!IsChecksumOK(HB, 58)) return Program.Debug(false, 1, "ODS1.Test: home block first checksum invalid");
             if (!IsChecksumOK(HB, 510)) return Program.Debug(false, 1, "ODS1.Test: home block second checksum invalid");
-            Int32 FMAX = HB.ToUInt16(6); // H.FMAX
+            Int32 FMAX = HB.GetUInt16L(6); // H.FMAX
             if (FMAX < 16) return Program.Debug(false, 1, "ODS1.Test: home block maximum number of files invalid (is {0:D0}, require n >= 16)", FMAX);
             Int32 n = (FMAX + 4095) / 4096;
-            Int32 l = HB.ToUInt16(0); // H.IBSZ, index file bitmap size
+            Int32 l = HB.GetUInt16L(0); // H.IBSZ, index file bitmap size
             Int32 fLim = l * 4096; // file limit (based on current data structure sizes; FMAX may be higher)
             if (fLim > FMAX) fLim = FMAX;
             if ((l < 1) || (l > n)) return Program.Debug(false, 1, "ODS1.Test: home block index file bitmap size invalid (is {0:D0}, require 1 <= n <= {1:D0})", l, n);
-            n = (HB.ToUInt16(2) << 16) + HB.ToUInt16(4); // HB.IBLB - index file bitmap LBN
+            n = (HB.GetUInt16L(2) << 16) + HB.GetUInt16L(4); // HB.IBLB - index file bitmap LBN
             if ((n <= 1) || (n >= disk.BlockCount - l - 16)) return Program.Debug(false, 1, "ODS1.Test: home block index file bitmap LBN invalid (is {0:D0}, require 1 < n < {1:D0})", n, disk.BlockCount - l - 16);
-            if (HB.ToUInt16(8) != 1) return Program.Debug(false, 1, "ODS1.Test: home block storage bitmap cluster factor invalid (must be 1)");
-            if (HB.ToUInt16(10) != 0) return Program.Debug(false, 1, "ODS1.Test: home block disk device type invalid (must be 0)");
-            n = HB.ToUInt16(12);
+            if (HB.GetUInt16L(8) != 1) return Program.Debug(false, 1, "ODS1.Test: home block storage bitmap cluster factor invalid (must be 1)");
+            if (HB.GetUInt16L(10) != 0) return Program.Debug(false, 1, "ODS1.Test: home block disk device type invalid (must be 0)");
+            n = HB.GetUInt16L(12);
             if ((n != 0x0101) && (n != 0x0102)) return Program.Debug(false, 1, "ODS1.Test: home block volume structure level invalid (must be 0x0101 or 0x0102)");
             type = typeof(ODS1);
             if (level == 2) return true;
@@ -797,10 +797,10 @@ namespace FSX
             HMap[1] = 1;
             Block H = GetFileHeader(disk, 1); // index file header
             if (!IsChecksumOK(H, 510)) return Program.Debug(false, 1, "ODS1.Test: index file header checksum invalid");
-            n = H.ToUInt16(2); // H.FNUM
-            l = H.ToUInt16(4); // H.FSEQ
+            n = H.GetUInt16L(2); // H.FNUM
+            l = H.GetUInt16L(4); // H.FSEQ
             if ((n != 1) || (l != 1)) return Program.Debug(false, 1, "ODS1.Test: index file file number invalid (is {0:D0},{1:D0}, expect 1,1)", n, l);
-            n = H.ToUInt16(6); // H.FLEV
+            n = H.GetUInt16L(6); // H.FLEV
             if (n != 0x0101) return Program.Debug(false, 1, "ODS1.Test: index file structure level invalid (is 0x{0:x4}, expect 0x0101)", n);
             // TODO: check File Ident Area fields (e.g. file name, file type)
             n = 0; // calculated size of index file (based on map area retrieval pointers)
@@ -819,18 +819,18 @@ namespace FSX
                     {
                         lbn = H[p++] << 16;
                         ct = H[p++];
-                        lbn += H.ToUInt16(ref p);
+                        lbn += H.GetUInt16L(ref p);
                     }
                     else if ((CTSZ == 2) && (LBSZ == 2)) // Format 2 (not implemented)
                     {
-                        ct = H.ToUInt16(ref p);
-                        lbn = H.ToUInt16(ref p);
+                        ct = H.GetUInt16L(ref p);
+                        lbn = H.GetUInt16L(ref p);
                     }
                     else if ((CTSZ == 2) && (LBSZ == 4)) // Format3 (not implemented)
                     {
-                        ct = H.ToUInt16(ref p);
-                        lbn = H.ToUInt16(ref p) << 16;
-                        lbn += H.ToUInt16(ref p);
+                        ct = H.GetUInt16L(ref p);
+                        lbn = H.GetUInt16L(ref p) << 16;
+                        lbn += H.GetUInt16L(ref p);
                     }
                     else // unknown format
                     {
@@ -846,7 +846,7 @@ namespace FSX
                 if (w != 0) HMap[w] = 1;
                 H = GetFileHeader(disk, w);
             }
-            l = 2 + HB.ToUInt16(0); // number of index file blocks not occupied by file headers
+            l = 2 + HB.GetUInt16L(0); // number of index file blocks not occupied by file headers
             if ((n < l + 16) || (n > l + fLim)) return Program.Debug(false, 1, "ODS1.Test: index file block map length invalid (is {0:D0}, expect {1:D0} <= n <= {1:D0})", n, l + 16, l + fLim);
             n -= l; // number of file headers currently in Index File
             if (n < fLim) fLim = n; // adjust file limit down to fit current Index File size
@@ -854,10 +854,10 @@ namespace FSX
             if (HMap[2] != 0) return Program.Debug(false, 1, "ODS1.Test: storage bitmap file header conflict, header 2 already used by file {0:D0}", HMap[2]);
             HMap[2] = 2;
             H = GetFileHeader(disk, 2); // storage bitmap file header
-            n = H.ToUInt16(2); // H.FNUM
-            l = H.ToUInt16(4); // H.FSEQ
+            n = H.GetUInt16L(2); // H.FNUM
+            l = H.GetUInt16L(4); // H.FSEQ
             if ((n != 2) || (l != 2)) return Program.Debug(false, 1, "ODS1.Test: storage bitmap file file number invalid (is {0:D0},{1:D0}, expect 2,2)", n, l);
-            n = H.ToUInt16(6); // H.FLEV
+            n = H.GetUInt16L(6); // H.FLEV
             if (n != 0x0101) return Program.Debug(false, 1, "ODS1.Test: storage bitmap file structure level invalid (is 0x{0:x4}, expect 0x0101)", n);
             // TODO: check File Ident Area fields (e.g. file name, file type)
             n = 0; // calculated size of storage bitmap file (based on map area retrieval pointers)
@@ -877,18 +877,18 @@ namespace FSX
                     {
                         lbn = H[p++] << 16;
                         ct = H[p++];
-                        lbn += H.ToUInt16(ref p);
+                        lbn += H.GetUInt16L(ref p);
                     }
                     else if ((CTSZ == 2) && (LBSZ == 2)) // Format 2 (not implemented)
                     {
-                        ct = H.ToUInt16(ref p);
-                        lbn = H.ToUInt16(ref p);
+                        ct = H.GetUInt16L(ref p);
+                        lbn = H.GetUInt16L(ref p);
                     }
                     else if ((CTSZ == 2) && (LBSZ == 4)) // Format3 (not implemented)
                     {
-                        ct = H.ToUInt16(ref p);
-                        lbn = H.ToUInt16(ref p) << 16;
-                        lbn += H.ToUInt16(ref p);
+                        ct = H.GetUInt16L(ref p);
+                        lbn = H.GetUInt16L(ref p) << 16;
+                        lbn += H.GetUInt16L(ref p);
                     }
                     else // unknown format
                     {
@@ -901,7 +901,7 @@ namespace FSX
                     {
                         Block B = disk[lbn];
                         l = 4 + B[3] * 4; // offset of size dword
-                        bLim = (B.ToUInt16(l) << 16) + B.ToUInt16(l + 2); // size of unit in blocks from Storage Control Block
+                        bLim = (B.GetUInt16L(l) << 16) + B.GetUInt16L(l + 2); // size of unit in blocks from Storage Control Block
                         l = (bLim + 4095) / 4096; // number of storage bitmap blocks needed
                         if (l != B[3]) return Program.Debug(false, 1, "ODS1.Test: storage bitmap size inconsistent with volume size (bitmap capacity {0:D0}, volume size {1:D0}", B[3] * 4096, bLim);
                     }
@@ -937,24 +937,24 @@ namespace FSX
         private static Boolean IsChecksumOK(Block block, Int32 checksumOffset)
         {
             Int32 sum = 0;
-            for (Int32 p = 0; p < checksumOffset; p += 2) sum += block.ToUInt16(p);
-            Int32 n = block.ToUInt16(checksumOffset);
+            for (Int32 p = 0; p < checksumOffset; p += 2) sum += block.GetUInt16L(p);
+            Int32 n = block.GetUInt16L(checksumOffset);
             Program.Debug(2, "Block checksum @{0:D0} {1}: {2:x4} {3}= {4:x4}", checksumOffset, ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
             return ((sum != 0) && ((sum % 65536) == n));
         }
 
-        private static Block GetFileHeader(Disk disk, UInt16 fileNum)
+        private static Block GetFileHeader(Volume disk, UInt16 fileNum)
         {
             if (fileNum == 0) return null;
             Block HB = disk[1]; // home block
-            if (fileNum > HB.ToUInt16(6)) return null; // fileNum exceeds H.FMAX
+            if (fileNum > HB.GetUInt16L(6)) return null; // fileNum exceeds H.FMAX
             // first 16 file headers follow index bitmap (at disk LBN H.IBLB + H.IBSZ)
-            if (fileNum <= 16) return disk[(HB.ToUInt16(2) << 16) + HB.ToUInt16(4) + HB.ToUInt16(0) + fileNum - 1];
+            if (fileNum <= 16) return disk[(HB.GetUInt16L(2) << 16) + HB.GetUInt16L(4) + HB.GetUInt16L(0) + fileNum - 1];
             // file headers 17+ are at index file VBN H.IBSZ + 19
-            return GetFileBlock(disk, 1, HB.ToUInt16(0) + 2 + fileNum);
+            return GetFileBlock(disk, 1, HB.GetUInt16L(0) + 2 + fileNum);
         }
 
-        private static Block GetFileBlock(Disk disk, UInt16 fileNum, Int32 vbn)
+        private static Block GetFileBlock(Volume disk, UInt16 fileNum, Int32 vbn)
         {
             // get file header
             Block H = GetFileHeader(disk, fileNum);
@@ -975,18 +975,18 @@ namespace FSX
                     {
                         lbn = H[p++] << 16;
                         ct = H[p++];
-                        lbn += H.ToUInt16(ref p);
+                        lbn += H.GetUInt16L(ref p);
                     }
                     else if ((CTSZ == 2) && (LBSZ == 2)) // Format 2 (not implemented)
                     {
-                        ct = H.ToUInt16(ref p);
-                        lbn = H.ToUInt16(ref p);
+                        ct = H.GetUInt16L(ref p);
+                        lbn = H.GetUInt16L(ref p);
                     }
                     else if ((CTSZ == 2) && (LBSZ == 4)) // Format3 (not implemented)
                     {
-                        ct = H.ToUInt16(ref p);
-                        lbn = H.ToUInt16(ref p) << 16;
-                        lbn += H.ToUInt16(ref p);
+                        ct = H.GetUInt16L(ref p);
+                        lbn = H.GetUInt16L(ref p) << 16;
+                        lbn += H.GetUInt16L(ref p);
                     }
                     else // unknown format
                     {
@@ -998,7 +998,7 @@ namespace FSX
                 }
 
                 // if block wasn't found in this header, fetch next extension header
-                H = GetFileHeader(disk, H.ToUInt16(map + 2));
+                H = GetFileHeader(disk, H.GetUInt16L(map + 2));
             }
             return null;
         }

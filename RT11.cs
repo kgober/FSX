@@ -90,19 +90,19 @@ namespace FSX
 
         private static readonly String[] MONTHS = { null, "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 
-        private Disk mDisk;
+        private Volume mDisk;
         private Int32 mDirStart;
-        private ClusteredDisk mDir;
+        private ClusteredVolume mDir;
 
-        public RT11(Disk disk)
+        public RT11(Volume disk)
         {
             if (disk.BlockSize != 512) throw new ArgumentException("RT11 volume block size must be 512.");
             mDisk = disk;
-            mDirStart = IsChecksumOK(disk[1], 510) ? disk[1].ToUInt16(0x1d4) : defaultDirStart;
-            mDir = new ClusteredDisk(disk, 2, mDirStart - 2, 32);
+            mDirStart = IsChecksumOK(disk[1], 510) ? disk[1].GetUInt16L(0x1d4) : defaultDirStart;
+            mDir = new ClusteredVolume(disk, 2, mDirStart - 2, 32);
         }
 
-        public override Disk Disk
+        public override Volume Disk
         {
             get { return mDisk; }
         }
@@ -137,7 +137,7 @@ namespace FSX
             Regex RE = Regex(fileSpec);
             output.WriteLine(DateTime.Today.ToString(" dd-MMM-yyyy"));
             Block B = mDisk[1];
-            UInt16 w = B.ToUInt16(0x1d6);
+            UInt16 w = B.GetUInt16L(0x1d6);
             if ((w < 64000) & IsASCIIText(B, 0x01d8, 36))
             {
                 Byte[] buf = new Byte[36];
@@ -154,21 +154,21 @@ namespace FSX
             while (s != 0)
             {
                 Block seg = mDir[s];
-                Int32 eb = seg.ToUInt16(6);
-                Int32 bp = seg.ToUInt16(8);
+                Int32 eb = seg.GetUInt16L(6);
+                Int32 bp = seg.GetUInt16L(8);
                 Int32 sp = 10;
                 E esw;
-                while (((esw = (E)seg.ToUInt16(sp)) & E.EOS) == 0)
+                while (((esw = (E)seg.GetUInt16L(sp)) & E.EOS) == 0)
                 {
-                    w = seg.ToUInt16(sp + 2);
+                    w = seg.GetUInt16L(sp + 2);
                     String fn1 = (w < 64000) ? Radix50.Convert(w) : "---";
-                    w = seg.ToUInt16(sp + 4);
+                    w = seg.GetUInt16L(sp + 4);
                     String fn2 = (w < 64000) ? Radix50.Convert(w) : "---";
-                    w = seg.ToUInt16(sp + 6);
+                    w = seg.GetUInt16L(sp + 6);
                     String ext = (w < 64000) ? Radix50.Convert(w) : "---";
-                    Int32 len = seg.ToUInt16(sp + 8);
+                    Int32 len = seg.GetUInt16L(sp + 8);
                     String cdt = "           ";
-                    w = seg.ToUInt16(sp + 12);
+                    w = seg.GetUInt16L(sp + 12);
                     if ((w != 0) && ((esw & E.PERM) != 0))
                     {
                         Int32 y = ((w & 0xc000) >> 9) + (w & 0x001f) + 1972;
@@ -202,7 +202,7 @@ namespace FSX
                     bp += len;
                     sp += 14 + eb;
                 }
-                s = seg.ToUInt16(2);
+                s = seg.GetUInt16L(2);
             }
             if (f) output.WriteLine();
             output.WriteLine(" {0:D0} Files, {1:D0} Blocks", fct, bct);
@@ -220,28 +220,28 @@ namespace FSX
             while (s != 0)
             {
                 Block B = mDir[s];
-                Int32 eb = B.ToUInt16(6);
-                Int32 bp = B.ToUInt16(8);
+                Int32 eb = B.GetUInt16L(6);
+                Int32 bp = B.GetUInt16L(8);
                 Int32 sp = 10;
                 UInt16 w;
                 E esw;
-                while (((esw = (E)B.ToUInt16(sp)) & E.EOS) == 0)
+                while (((esw = (E)B.GetUInt16L(sp)) & E.EOS) == 0)
                 {
                     Char s1 = ((esw & E.PROT) == 0) ? '-' : 'P';
                     Char s2 = ((esw & E.READ) == 0) ? '-' : 'R';
                     Char s3 = ((esw & E.PERM) == 0) ? '-' : 'F';
                     Char s4 = ((esw & E.TENT) == 0) ? '-' : 'T';
                     Char s5 = ((esw & E.MPTY) == 0) ? '-' : 'E';
-                    w = B.ToUInt16(sp + 2);
+                    w = B.GetUInt16L(sp + 2);
                     String fn1 = (w < 64000) ? Radix50.Convert(w) : "---";
-                    w = B.ToUInt16(sp + 4);
+                    w = B.GetUInt16L(sp + 4);
                     String fn2 = (w < 64000) ? Radix50.Convert(w) : "---";
-                    w = B.ToUInt16(sp + 6);
+                    w = B.GetUInt16L(sp + 6);
                     String ext = (w < 64000) ? Radix50.Convert(w) : "---";
-                    Int32 len = B.ToUInt16(sp + 8);
-                    Int32 chj = B.ToUInt16(sp + 10);
+                    Int32 len = B.GetUInt16L(sp + 8);
+                    Int32 chj = B.GetUInt16L(sp + 10);
                     String cdt = "           ";
-                    w = B.ToUInt16(sp + 12);
+                    w = B.GetUInt16L(sp + 12);
                     if (w != 0)
                     {
                         Int32 y = ((w & 0xc000) >> 9) + (w & 0x001f) + 1972;
@@ -267,9 +267,9 @@ namespace FSX
                     bp += len;
                     sp += 14 + eb;
                 }
-                s = B.ToUInt16(2);
+                s = B.GetUInt16L(2);
             }
-            Int32 ns = mDir[1].ToUInt16(0); // number of directory segments
+            Int32 ns = mDir[1].GetUInt16L(0); // number of directory segments
             output.WriteLine(" {0:D0} Files, {1:D0} Blocks, {2:D0} Free blocks", fct, bct, zct);
             output.WriteLine(" {0:D0} Total blocks ({1:D0} Reserved, {2:D0} Directory)", mDirStart + ns * 2 + bct + zct, mDirStart, ns * 2);
         }
@@ -320,17 +320,17 @@ namespace FSX
             // RX01 and RX02 images should be written as physical images (including track 0)
             // all other images (including RX50) should be written as logical images
             FileStream f = new FileStream(fileName, FileMode.Create);
-            Disk d = mDisk;
+            Volume d = mDisk;
             Int32 size;
             Type type;
             if (!Test(d, 3, out size, out type)) return false;
             if ((size == 494) || (size == 988)) // RX01 and RX02 sizes
             {
-                Boolean iFlag = (d is InterleavedDisk);
-                while (d.BaseDisk != null)
+                Boolean iFlag = (d is InterleavedVolume);
+                while (d.Base != null)
                 {
-                    d = d.BaseDisk;
-                    if (d is InterleavedDisk) iFlag = true;
+                    d = d.Base;
+                    if (d is InterleavedVolume) iFlag = true;
                 }
                 if (iFlag)
                 {
@@ -427,26 +427,26 @@ namespace FSX
             while (s != 0)
             {
                 Block seg = mDir[s];
-                Int32 eb = seg.ToUInt16(6);
-                Int32 bp = seg.ToUInt16(8);
+                Int32 eb = seg.GetUInt16L(6);
+                Int32 bp = seg.GetUInt16L(8);
                 Int32 sp = 10;
                 E esw;
                 UInt16 w;
-                while (((esw = (E)seg.ToUInt16(sp)) & E.EOS) == 0)
+                while (((esw = (E)seg.GetUInt16L(sp)) & E.EOS) == 0)
                 {
-                    Int32 len = seg.ToUInt16(sp + 8);
+                    Int32 len = seg.GetUInt16L(sp + 8);
                     if ((esw & E.PERM) != 0)
                     {
-                        w = seg.ToUInt16(sp + 2);
+                        w = seg.GetUInt16L(sp + 2);
                         String fn1 = (w < 64000) ? Radix50.Convert(w) : "---";
-                        w = seg.ToUInt16(sp + 4);
+                        w = seg.GetUInt16L(sp + 4);
                         String fn2 = (w < 64000) ? Radix50.Convert(w) : "---";
-                        w = seg.ToUInt16(sp + 6);
+                        w = seg.GetUInt16L(sp + 6);
                         String ext = (w < 64000) ? Radix50.Convert(w) : "---";
                         String fn = String.Concat(fn1, fn2, ".", ext);
                         if (RE.IsMatch(fn))
                         {
-                            w = seg.ToUInt16(sp + 12);
+                            w = seg.GetUInt16L(sp + 12);
                             DateTime dt = DateTime.Now;
                             if (w != 0)
                             {
@@ -461,7 +461,7 @@ namespace FSX
                     bp += len;
                     sp += 14 + eb;
                 }
-                s = seg.ToUInt16(2);
+                s = seg.GetUInt16L(2);
             }
             return null;
         }
@@ -482,11 +482,11 @@ namespace FSX
         // level 5 - check file header allocation (return volume size and type)
         // level 6 - check data block allocation (return volume size and type)
         // note: levels 3 and 4 are reversed because this makes more sense for RT-11 volumes
-        public static Boolean Test(Disk disk, Int32 level, out Int32 size, out Type type)
+        public static Boolean Test(Volume disk, Int32 level, out Int32 size, out Type type)
         {
             // level 0 - check basic disk parameters (return required block size and disk type)
             size = 512;
-            type = typeof(Disk);
+            type = typeof(Volume);
             if (disk == null) return false;
             if (disk.BlockSize != size) return Program.Debug(false, 1, "RT11.Test: invalid block size (is {0:D0}, require {1:D0})", disk.BlockSize, size);
             if (level == 0) return true;
@@ -495,7 +495,7 @@ namespace FSX
             if (level == 1)
             {
                 size = -1;
-                type = typeof(Disk);
+                type = typeof(Volume);
                 if (disk.BlockCount < 1) return Program.Debug(false, 1, "RT11.Test: disk too small to contain boot block");
                 return true;
             }
@@ -509,7 +509,7 @@ namespace FSX
 
             // level 3 - check directory structure (return volume size and type)
             if (disk.BlockCount < 8) return Program.Debug(false, 1, "RT11.Test: disk too small to contain directory segment {0:D0}", 1);
-            ClusteredDisk Dir = new ClusteredDisk(disk, 2, 4, 32); // start at 4 so that segment 1 falls on block 6
+            ClusteredVolume Dir = new ClusteredVolume(disk, 2, 4, 32); // start at 4 so that segment 1 falls on block 6
             // check for problems with segment chain structure and count segments in use
             Int32[] SS = new Int32[32]; // segments seen (to detect cycles)
             Int32 sc = 0; // segment count
@@ -518,7 +518,7 @@ namespace FSX
             {
                 if (SS[s] != 0) return Program.Debug(false, 1, "RT11.Test: invalid directory segment chain: segment {0:D0} repeated", s);
                 SS[s] = ++sc;
-                s = Dir[s].ToUInt16(2); // next directory segment
+                s = Dir[s].GetUInt16L(2); // next directory segment
                 if (s > 31) return Program.Debug(false, 1, "RT11.Test: invalid directory segment chain: segment {0:D0} invalid", s);
                 if (s >= Dir.BlockCount) return Program.Debug(false, 1, "RT11.Test: disk too small to contain directory segment {0:D0}", s);
             }
@@ -530,27 +530,27 @@ namespace FSX
             while (s != 0)
             {
                 Block D = Dir[s];
-                Int32 n = D.ToUInt16(0); // total directory segments
+                Int32 n = D.GetUInt16L(0); // total directory segments
                 if ((ns == -1) && (n >= sc) && (n < 32)) ns = n;
                 else if ((s == 1) || ((s != 1) && (n != ns) && (n != 0))) return Program.Debug(false, 1, "RT11.Test: inconsistent directory segment count in segment {0:D0} (is {1:D0}, expect {2:D0}{3})", s, n, sc, (sc == 31) ? null : " <= n <= 31");
-                n = D.ToUInt16(4); // highest segment in use
+                n = D.GetUInt16L(4); // highest segment in use
                 if ((s == 1) && (n != sc)) return Program.Debug(false, 1, "RT11.Test: inconsistent highest-segment-used pointer in segment {0:D0} (is {1:D0}, expect {2:D0})", s, n, sc);
-                n = D.ToUInt16(6); // extra bytes per directory entry
+                n = D.GetUInt16L(6); // extra bytes per directory entry
                 if ((eb == -1) && ((n % 2) == 0)) eb = n;
                 else if (n != eb) return Program.Debug(false, 1, "RT11.Test: inconsistent or invalid extra bytes value in segment {0:D0} (is {1:D0}, require {2})", s, n, (eb == -1) ? "even number" : eb.ToString("D0"));
-                Int32 bp = D.ToUInt16(8); // starting data block for this segment
+                Int32 bp = D.GetUInt16L(8); // starting data block for this segment
                 if (bp < 6 + ns * 2) return Program.Debug(false, 1, "RT11.Test: invalid start-of-data pointer in segment {0:D0} (is {1:D0}, require n >= {2:D0})", s, bp, 6 + ns * 2);
                 Int32 sp = 10;
                 E esw;
-                while (((esw = (E)D.ToUInt16(sp)) & E.EOS) == 0) // entry status word
+                while (((esw = (E)D.GetUInt16L(sp)) & E.EOS) == 0) // entry status word
                 {
-                    n = D.ToUInt16(sp + 8); // file length (in blocks)
+                    n = D.GetUInt16L(sp + 8); // file length (in blocks)
                     bp += n;
                     if (sp + 14 + eb > 1022) return Program.Debug(false, 1, "RT11.Test: missing end-of-segment marker in segment {0:D0}", s);
                     sp += 14 + eb;
                 }
                 if (bp > md) md = bp;
-                s = D.ToUInt16(2); // next directory segment
+                s = D.GetUInt16L(2); // next directory segment
             }
             size = md;
             if (level == 3) return true;
@@ -562,17 +562,17 @@ namespace FSX
                 Block D = Dir[s];
                 Int32 sp = 10;
                 E esw;
-                while (((esw = (E)D.ToUInt16(sp)) & E.EOS) == 0) // entry status word
+                while (((esw = (E)D.GetUInt16L(sp)) & E.EOS) == 0) // entry status word
                 {
-                    UInt16 w = D.ToUInt16(sp + 14 + eb);
-                    Boolean lastfile = (((E)w & E.EOS) == E.EOS) && (D.ToUInt16(2) == 0);
-                    w = D.ToUInt16(sp + 2); // Radix-50 file name (chars 1-3)
+                    UInt16 w = D.GetUInt16L(sp + 14 + eb);
+                    Boolean lastfile = (((E)w & E.EOS) == E.EOS) && (D.GetUInt16L(2) == 0);
+                    w = D.GetUInt16L(sp + 2); // Radix-50 file name (chars 1-3)
                     if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY)) return Program.Debug(false, 1, "RT11.Test: invalid file name in segment {0:D0}", s);
                     String fn1 = Radix50.Convert(w);
-                    w = D.ToUInt16(sp + 4); // Radix-50 file name (chars 4-6)
+                    w = D.GetUInt16L(sp + 4); // Radix-50 file name (chars 4-6)
                     if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY)) return Program.Debug(false, 1, "RT11.Test: invalid file name in segment {0:D0}", s);
                     String fn2 = Radix50.Convert(w);
-                    w = D.ToUInt16(sp + 6); // Radix-50 file type
+                    w = D.GetUInt16L(sp + 6); // Radix-50 file type
                     if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY)) return Program.Debug(false, 1, "RT11.Test: invalid file name in segment {0:D0}", s);
                     String ext = Radix50.Convert(w);
                     String fn = String.Concat(fn1, fn2).TrimEnd(' ');
@@ -580,7 +580,7 @@ namespace FSX
                     E e = esw & (E.TENT | E.MPTY | E.PERM);
                     if ((e != E.TENT) && (e != E.MPTY) && (e != E.PERM)) return Program.Debug(false, 1, "RT11.Test: invalid file type in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
                     if (((esw & (E.PROT | E.READ)) != 0) && (e != E.PERM)) return Program.Debug(false, 1, "RT11.Test: Protected/ReadOnly flags not valid for non-permanent file in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
-                    w = D.ToUInt16(sp + 12); // creation date
+                    w = D.GetUInt16L(sp + 12); // creation date
                     if ((w != 0) && !(lastfile && (esw & E.MPTY) == E.MPTY))
                     {
                         Int32 y = ((w & 0xc000) >> 9) + (w & 0x001f) + 1972;
@@ -590,7 +590,7 @@ namespace FSX
                     }
                     sp += 14 + eb;
                 }
-                s = D.ToUInt16(2); // next directory segment
+                s = D.GetUInt16L(2); // next directory segment
             }
             if (level == 4) return true;
 
@@ -606,14 +606,14 @@ namespace FSX
             while (s != 0)
             {
                 Block D = Dir[s];
-                Int32 bp = D.ToUInt16(8); // starting data block for this segment
+                Int32 bp = D.GetUInt16L(8); // starting data block for this segment
                 Int32 sp = 10;
                 E esw;
-                while (((esw = (E)D.ToUInt16(sp)) & E.EOS) == 0) // entry status word
+                while (((esw = (E)D.GetUInt16L(sp)) & E.EOS) == 0) // entry status word
                 {
-                    String fn = String.Concat(Radix50.Convert(D.ToUInt16(sp + 2)), Radix50.Convert(D.ToUInt16(sp + 4))).TrimEnd(' ');
-                    fn = String.Concat(fn, ".", Radix50.Convert(D.ToUInt16(sp + 6)).TrimEnd(' '));
-                    Int32 n = D.ToUInt16(sp + 8); // file length (in blocks)
+                    String fn = String.Concat(Radix50.Convert(D.GetUInt16L(sp + 2)), Radix50.Convert(D.GetUInt16L(sp + 4))).TrimEnd(' ');
+                    fn = String.Concat(fn, ".", Radix50.Convert(D.GetUInt16L(sp + 6)).TrimEnd(' '));
+                    Int32 n = D.GetUInt16L(sp + 8); // file length (in blocks)
                     for (Int32 i = 0; i < n; i++)
                     {
                         if ((bp + i == disk.BlockCount) & ((esw & E.MPTY) == 0)) Program.Debug(1, "RT11.Test: WARNING: blocks {0:D0} and higher of file \"{1}\" fall outside image block range (is {2:D0}, expect n < {3:D0})", bp + i, fn, disk.BlockCount);
@@ -623,7 +623,7 @@ namespace FSX
                     bp += n;
                     sp += 14 + eb;
                 }
-                s = D.ToUInt16(2); // next directory segment
+                s = D.GetUInt16L(2); // next directory segment
             }
             // unmarked blocks are lost
             for (Int32 i = 0; i < size; i++)
@@ -641,8 +641,8 @@ namespace FSX
         private static Boolean IsChecksumOK(Block block, Int32 checksumOffset)
         {
             Int32 sum = 0;
-            for (Int32 p = 0; p < checksumOffset; p += 2) sum += block.ToUInt16(p);
-            Int32 n = block.ToUInt16(checksumOffset);
+            for (Int32 p = 0; p < checksumOffset; p += 2) sum += block.GetUInt16L(p);
+            Int32 n = block.GetUInt16L(checksumOffset);
             Program.Debug(2, "Block checksum @{0:D0} {1}: {2:x4} {3}= {4:x4}", checksumOffset, ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
             return ((sum != 0) && ((sum % 65536) == n));
         }

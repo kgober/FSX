@@ -32,7 +32,7 @@ namespace FSX
 {
     abstract partial class FileSystem
     {
-        public abstract Disk Disk { get; }                                                      // disk where volume is loaded from
+        public abstract Volume Disk { get; }                                                      // disk where volume is loaded from
         public abstract String Source { get; }                                                  // source where volume is loaded from
         public abstract String Type { get; }                                                    // type of file system on this volume
         public abstract String Dir { get; }                                                     // current directory on this volume

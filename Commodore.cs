@@ -194,12 +194,12 @@ namespace FSX
     }
 
 
-    partial class CHSDisk : Disk
+    class Commodore
     {
         // load .D64/.D67 image file
-        public static CHSDisk LoadD64(String source, Byte[] data)
+        public static CHSVolume LoadD64(String source, Byte[] data)
         {
-            CHSDisk d = null;
+            CHSVolume d = null;
             Int32 z1 = 21, z2 = 19, z3 = 18, z4 = 17;
             Int32 c = -1;
             if (data.Length == 176640)
@@ -212,7 +212,7 @@ namespace FSX
             else if ((data.Length == 205312) || (data.Length == 206114)) c = 42;
             if (c != -1)
             {
-                d = new CHSDisk(source, 256, 1, c, 0, 1, 0);
+                d = new CHSVolume(source, 256, 1, c, 0, 1, 0);
                 for (Int32 t = 1; t <= 17; t++) d[t, 0] = new Track(z1);
                 for (Int32 t = 18; t <= 24; t++) d[t, 0] = new Track(z2);
                 for (Int32 t = 25; t <= 30; t++) d[t, 0] = new Track(z3);
@@ -228,10 +228,10 @@ namespace FSX
                     Track T = d[t, 0];
                     for (Int32 s = 0; s < T.Length; s++)
                     {
-                        Sector S = new Sector(s, data, p, 256);
+                        Sector S = new Sector(s, 256, data, p);
                         p += 256;
                         if (q != -1) S.ErrorCode = data[q++];
-                        T.Set(s, S);
+                        T[s] = S;
                     }
                 }
                 return d;
@@ -241,14 +241,14 @@ namespace FSX
 
 
         // load .D80 image file
-        public static CHSDisk LoadD80(String source, Byte[] data)
+        public static CHSVolume LoadD80(String source, Byte[] data)
         {
-            CHSDisk d = null;
+            CHSVolume d = null;
             Int32 c = -1;
             if (data.Length == 533248) c = 77;
             if (c != -1)
             {
-                d = new CHSDisk(source, 256, 1, c, 0, 1, 0);
+                d = new CHSVolume(source, 256, 1, c, 0, 1, 0);
                 for (Int32 t = 1; t <= 39; t++) d[t, 0] = new Track(29);
                 for (Int32 t = 40; t <= 53; t++) d[t, 0] = new Track(27);
                 for (Int32 t = 54; t <= 64; t++) d[t, 0] = new Track(25);
@@ -264,10 +264,10 @@ namespace FSX
                     Track T = d[t, 0];
                     for (Int32 s = 0; s < T.Length; s++)
                     {
-                        Sector S = new Sector(s, data, p, 256);
+                        Sector S = new Sector(s, 256, data, p);
                         p += 256;
                         if (q != -1) S.ErrorCode = data[q++];
-                        T.Set(s, S);
+                        T[s] = S;
                     }
                 }
                 return d;
@@ -277,14 +277,14 @@ namespace FSX
 
 
         // load .D82 image file
-        public static CHSDisk LoadD82(String source, Byte[] data)
+        public static CHSVolume LoadD82(String source, Byte[] data)
         {
-            CHSDisk d = null;
+            CHSVolume d = null;
             Int32 c = -1;
             if (data.Length == 1066496) c = 154; // physically 77 with 2 sides
             if (c != -1)
             {
-                d = new CHSDisk(source, 256, 1, c, 0, 1, 0);
+                d = new CHSVolume(source, 256, 1, c, 0, 1, 0);
                 for (Int32 t = 1; t <= 39; t++) d[t, 0] = new Track(29);
                 for (Int32 t = 40; t <= 53; t++) d[t, 0] = new Track(27);
                 for (Int32 t = 54; t <= 64; t++) d[t, 0] = new Track(25);
@@ -304,10 +304,10 @@ namespace FSX
                     Track T = d[t, 0];
                     for (Int32 s = 0; s < T.Length; s++)
                     {
-                        Sector S = new Sector(s, data, p, 256);
+                        Sector S = new Sector(s, 256, data, p);
                         p += 256;
                         if (q != -1) S.ErrorCode = data[q++];
-                        T.Set(s, S);
+                        T[s] = S;
                     }
                 }
                 return d;

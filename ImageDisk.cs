@@ -29,10 +29,10 @@ using System;
 
 namespace FSX
 {
-    partial class CHSDisk
+    class ImageDisk
     {
         // Load ImageDisk .IMD image file
-        public static CHSDisk LoadIMD(String source, Byte[] data)
+        public static CHSVolume Load(String source, Byte[] data)
         {
             Int32 p, n;
             Int32[] SS = new Int32[0];
@@ -91,7 +91,7 @@ namespace FSX
 
             // read image (use last track's largest sector as default volume sector size)
             if (ss == -1) for (Int32 i = 0; i < SS.Length; i++) if (SS[i] > ss) ss = SS[i];
-            CHSDisk image = new CHSDisk(source, ss, ++nc, ++nh);
+            CHSVolume image = new CHSVolume(source, ss, ++nc, ++nh);
             for (p = 0; data[p++] != 0x1a; ) ; // skip ASCII header
             while (p < data.Length)
             {
@@ -130,7 +130,7 @@ namespace FSX
                         case 5:
                         case 7:
                             n = (ss == -1) ? SS[s] : ss;
-                            t.Set(s, new Sector(SM[s], data, p, n));
+                            t[s] = new Sector(SM[s], n, data, p);
                             p += n;
                             break;
                         case 2:
@@ -138,11 +138,11 @@ namespace FSX
                         case 6:
                         case 8:
                             n = (ss == -1) ? SS[s] : ss;
-                            t.Set(s, new Sector(SM[s], ss, data[p++]));
+                            t[s] = new Sector(SM[s], n, data[p++]);
                             break;
                     }
                 }
-                image.mData[c, h] = t;
+                image[c, h] = t;
             }
 
             return image;

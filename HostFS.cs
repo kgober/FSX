@@ -55,7 +55,7 @@ namespace FSX
             mDir = dir;
         }
 
-        public override Disk Disk
+        public override Volume Disk
         {
             get { return null; }
         }

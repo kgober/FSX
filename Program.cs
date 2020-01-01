@@ -22,10 +22,9 @@
 
 // File System Exchange (FSX) Program Structure
 //
-// A FileSystem is a file/directory structure and resides on an IVolume (HostFS excepted).
-// An IVolume is a logical block interface to an underlying Disk (or a portion of one).
-// A Disk is a collection of sectors and usually resides in an image file.  Some Disks
-// represent a transformation of an underlying Disk (e.g. clustering or interleaving).
+// A FileSystem is a file/directory structure and resides on a Volume (HostFS excepted).
+// A Volume is a collection of Blocks and usually resides in an image file.  Some Volumes
+// represent a transformation of an underlying Volume (e.g. clustering or interleaving).
 
 
 // Future Improvements / To Do
@@ -480,12 +479,12 @@ namespace FSX
                         Type type;
                         if (Auto.GetInfo(t, out size, out type))
                         {
-                            if ((type == typeof(LBADisk)) || (type == typeof(Disk)))
+                            if ((type == typeof(LBAVolume)) || (type == typeof(Volume)))
                             {
-                                Disk disk = new LBADisk(s, data, size);
+                                Volume disk = new LBAVolume(s, data, size);
                                 return Auto.ConstructFS(t, disk);
                             }
-                            else if (type == typeof(CHSDisk))
+                            else if (type == typeof(CHSVolume))
                             {
                                 // no good way to guess what C/H/S values to use
                             }
@@ -504,7 +503,7 @@ namespace FSX
             if ((path.EndsWith(".imd", StringComparison.OrdinalIgnoreCase)) && (data.Length > 31) && (IndexOf(Encoding.ASCII, "IMD ", data, 0, 4) == 0))
             {
                 // ImageDisk .IMD image file
-                CHSDisk d = CHSDisk.LoadIMD(s, data);
+                CHSVolume d = ImageDisk.Load(s, data);
                 if (d != null) return LoadFS(s, d);
             }
             //if ((path.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)) && ((data.Length % 2048) == 0))
@@ -521,7 +520,7 @@ namespace FSX
             //}
             if (path.EndsWith(".d64", StringComparison.OrdinalIgnoreCase))
             {
-                CHSDisk d = CHSDisk.LoadD64(s, data);
+                CHSVolume d = Commodore.LoadD64(s, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -531,7 +530,7 @@ namespace FSX
             }
             if (path.EndsWith(".d67", StringComparison.OrdinalIgnoreCase))
             {
-                CHSDisk d = CHSDisk.LoadD64(s, data);
+                CHSVolume d = Commodore.LoadD64(s, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -541,7 +540,7 @@ namespace FSX
             }
             if (path.EndsWith(".d80", StringComparison.OrdinalIgnoreCase))
             {
-                CHSDisk d = CHSDisk.LoadD80(s, data);
+                CHSVolume d = Commodore.LoadD80(s, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -551,7 +550,7 @@ namespace FSX
             }
             if (path.EndsWith(".d82", StringComparison.OrdinalIgnoreCase))
             {
-                CHSDisk d = CHSDisk.LoadD82(s, data);
+                CHSVolume d = Commodore.LoadD82(s, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -572,7 +571,7 @@ namespace FSX
             // try to identify storage format based on image data size
             if (data.Length == 174848) // 35 tracks, 683 blocks (Commodore 1541/4040)
             {
-                CHSDisk d = CHSDisk.LoadD64(source, data);
+                CHSVolume d = Commodore.LoadD64(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -583,7 +582,7 @@ namespace FSX
             }
             if (data.Length == 175531) // 35 tracks, 683 blocks, with error bytes (Commodore 1541)
             {
-                CHSDisk d = CHSDisk.LoadD64(source, data);
+                CHSVolume d = Commodore.LoadD64(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -594,7 +593,7 @@ namespace FSX
             }
             if (data.Length == 176640) // 35 tracks, 690 blocks (Commodore 2040)
             {
-                CHSDisk d = CHSDisk.LoadD64(source, data);
+                CHSVolume d = Commodore.LoadD64(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -605,7 +604,7 @@ namespace FSX
             }
             if (data.Length == 196608) // 40 tracks, 768 blocks (Commodore 1541)
             {
-                CHSDisk d = CHSDisk.LoadD64(source, data);
+                CHSVolume d = Commodore.LoadD64(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -616,7 +615,7 @@ namespace FSX
             }
             if (data.Length == 197376) // 40 tracks, 768 blocks, with error bytes (Commodore 1541)
             {
-                CHSDisk d = CHSDisk.LoadD64(source, data);
+                CHSVolume d = Commodore.LoadD64(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -627,7 +626,7 @@ namespace FSX
             }
             if (data.Length == 205312) // 42 tracks, 802 blocks (Commodore 1541)
             {
-                CHSDisk d = CHSDisk.LoadD64(source, data);
+                CHSVolume d = Commodore.LoadD64(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -638,7 +637,7 @@ namespace FSX
             }
             if (data.Length == 206114) // 42 tracks, 802 blocks, with error bytes (Commodore 1541)
             {
-                CHSDisk d = CHSDisk.LoadD64(source, data);
+                CHSVolume d = Commodore.LoadD64(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -649,47 +648,47 @@ namespace FSX
             }
             if (data.Length == 252928) // 76 tracks of 26 128-byte sectors (DEC RX01)
             {
-                CHSDisk d = new CHSDisk(source, data, 128, 76, 1, 26);
+                CHSVolume d = new CHSVolume(source, data, 128, 76, 1, 26);
                 return LoadFS(source, d);
             }
             else if (data.Length == 256256) // 77 tracks of 26 128-byte sectors (IBM 3740)
             {
-                CHSDisk d = new CHSDisk(source, data, 128, 77, 1, 26);
+                CHSVolume d = new CHSVolume(source, data, 128, 77, 1, 26);
                 return LoadFS(source, d);
             }
             else if (data.Length == 266240) // 80 tracks of 26 128-byte sectors (raw 8" SSSD diskette)
             {
-                CHSDisk d = new CHSDisk(source, data, 128, 80, 1, 26);
+                CHSVolume d = new CHSVolume(source, data, 128, 80, 1, 26);
                 return LoadFS(source, d);
             }
             else if (data.Length == 295936) // 578 512-byte blocks (DEC TU56 DECTape standard format)
             {
-                LBADisk d = new LBADisk(source, data, 512);
+                LBAVolume d = new LBAVolume(source, data, 512);
                 return LoadFS(source, d);
             }
             else if (data.Length == 409600) // 80 tracks of 10 512-byte sectors (DEC RX50)
             {
-                CHSDisk d = new CHSDisk(source, data, 512, 80, 1, 10);
+                CHSVolume d = new CHSVolume(source, data, 512, 80, 1, 10);
                 return LoadFS(source, d);
             }
             else if (data.Length == 505856) // 76 tracks of 26 256-byte sectors (DEC RX02)
             {
-                CHSDisk d = new CHSDisk(source, data, 256, 76, 1, 26);
+                CHSVolume d = new CHSVolume(source, data, 256, 76, 1, 26);
                 return LoadFS(source, d);
             }
             else if (data.Length == 512512) // 77 tracks of 26 256-byte sectors
             {
-                CHSDisk d = new CHSDisk(source, data, 256, 77, 1, 26);
+                CHSVolume d = new CHSVolume(source, data, 256, 77, 1, 26);
                 return LoadFS(source, d);
             }
             else if (data.Length == 532480) // 80 tracks of 26 256-byte sectors (raw 8" SSDD diskette)
             {
-                CHSDisk d = new CHSDisk(source, data, 256, 80, 1, 26);
+                CHSVolume d = new CHSVolume(source, data, 256, 80, 1, 26);
                 return LoadFS(source, d);
             }
             else if (data.Length == 533248) // 77 tracks, 2083 blocks (Commodore 8050)
             {
-                CHSDisk d = CHSDisk.LoadD80(source, data);
+                CHSVolume d = Commodore.LoadD80(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -700,7 +699,7 @@ namespace FSX
             }
             else if (data.Length == 1066496) // 154 tracks, 4166 blocks (Commodore 8250)
             {
-                CHSDisk d = CHSDisk.LoadD82(source, data);
+                CHSVolume d = Commodore.LoadD82(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -719,37 +718,37 @@ namespace FSX
             // and therefore require special error-free disk cartridges.
             else if (data.Length == 1228800) // 4800 256-byte sectors (DEC RK02, 3 spare tracks)
             {
-                CHSDisk d = new CHSDisk(source, data, 256, 200, 2, 12);
+                CHSVolume d = new CHSVolume(source, data, 256, 200, 2, 12);
                 return LoadFS(source, d);
             }
             else if (data.Length == 1247232) // 4872 256-byte sectors (DEC RK02, all tracks used)
             {
-                CHSDisk d = new CHSDisk(source, data, 256, 203, 2, 12);
+                CHSVolume d = new CHSVolume(source, data, 256, 203, 2, 12);
                 return LoadFS(source, d);
             }
             else if (data.Length == 2457600) // 4800 512-byte sectors (DEC RK03, 3 spare tracks)
             {
-                CHSDisk d = new CHSDisk(source, data, 512, 200, 2, 12);
+                CHSVolume d = new CHSVolume(source, data, 512, 200, 2, 12);
                 return LoadFS(source, d);
             }
             else if (data.Length == 2494464) // 4872 512-byte sectors (DEC RK03, all tracks used)
             {
-                CHSDisk d = new CHSDisk(source, data, 512, 203, 2, 12);
+                CHSVolume d = new CHSVolume(source, data, 512, 203, 2, 12);
                 return LoadFS(source, d);
             }
             else if ((data.Length % 513 == 0) && (data.Length % 512 == 0))
             {
                 // these might be 512-byte blocks with 1 added error/status byte
-                LBADisk d1 = new LBADisk(source, data, 512);
+                LBAVolume d1 = new LBAVolume(source, data, 512);
                 Int32 n = data.Length / 513;
-                LBADisk d2 = new LBADisk(source, 512, n);
+                LBAVolume d2 = new LBAVolume(source, 512, n);
                 for (Int32 i = 0; i < n; i++) d2[i].CopyFrom(data, i * 513, 0, 512);
-                return Auto.Check(new Disk[] { d1, d2 });
+                return Auto.Check(new Volume[] { d1, d2 });
             }
             else if (data.Length % 513 == 0) // assume 512-byte blocks with error/status bytes
             {
                 Int32 n = data.Length / 513;
-                LBADisk d = new LBADisk(source, 512, n);
+                LBAVolume d = new LBAVolume(source, 512, n);
                 Int32 p = 0;
                 for (Int32 i = 0; i < n; i++)
                 {
@@ -762,18 +761,18 @@ namespace FSX
             }
             else if (data.Length % 512 == 0) // some number of 512-byte blocks
             {
-                LBADisk d = new LBADisk(source, data, 512);
+                LBAVolume d = new LBAVolume(source, data, 512);
                 return LoadFS(source, d);
             }
 
             return null;
         }
 
-        static FileSystem LoadFS(String source, Disk image)
+        static FileSystem LoadFS(String source, Volume image)
         {
-            if (image is CHSDisk)
+            if (image is CHSVolume)
             {
-                CHSDisk disk = image as CHSDisk;
+                CHSVolume disk = image as CHSVolume;
                 if ((disk.MaxCylinder < 80) && (disk.MinHead == disk.MaxHead) && (disk.MaxSector(disk.MinCylinder, disk.MinHead) == 26) && (disk.BlockSize == 128 || disk.BlockSize == 256))
                 {
                     // DEC RX01 Floppy - IBM 3740 format (8" SSSD diskette, 77 tracks, 26 sectors)
@@ -789,20 +788,20 @@ namespace FSX
                     // 'Soft' sector interleave is 2:1, with a 6 sector track-to-track skew.
                     Debug(2, "RX01/RX02 image, also testing with interleave applied");
                     Int32 n = 512 / disk.BlockSize;
-                    Disk d2 = new ClusteredDisk(new InterleavedDisk(disk, 2, 0, 6, 26), n, 26); // if image includes track 0
-                    Disk d3 = new ClusteredDisk(new InterleavedDisk(disk, 2, 0, 6, 0), n, 0); // if image starts at track 1
-                    return Auto.Check(new Disk[] { disk, d2, d3 });
+                    Volume d2 = new ClusteredVolume(new InterleavedVolume(disk, 2, 0, 6, 26), n, 26); // if image includes track 0
+                    Volume d3 = new ClusteredVolume(new InterleavedVolume(disk, 2, 0, 6, 0), n, 0); // if image starts at track 1
+                    return Auto.Check(new Volume[] { disk, d2, d3 });
                 }
                 if ((disk.MaxCylinder < 80) && (disk.MinHead == disk.MaxHead) && (disk.MaxSector(disk.MinCylinder, disk.MinHead) == 10) && (disk.BlockSize == 512))
                 {
                     // DEC RX50 Floppy - 5.25" SSDD diskette, 80 tracks, 10 sectors
                     // 'Soft' sector interleave is 2:1, with a 2 sector track-to-track skew.
                     Debug(2, "RX50 image, also testing with interleave applied");
-                    Disk d2 = new InterleavedDisk(disk, 2, 0, 2, 0);
-                    return Auto.Check(new Disk[] { disk, d2 });
+                    Volume d2 = new InterleavedVolume(disk, 2, 0, 2, 0);
+                    return Auto.Check(new Volume[] { disk, d2 });
                 }
             }
-            return Auto.Check(new Disk[] { image });
+            return Auto.Check(new Volume[] { image });
         }
 
         static Byte[] DecompressGZip(Byte[] data)
@@ -1059,7 +1058,7 @@ namespace FSX
                         String s = "   ";
                         if ((i + j + 1 < data.Length) && (j + 1 < l))
                         {
-                            UInt16 w = BitConverter.ToUInt16(data, i + j);
+                            UInt16 w = Program.ToUInt16L(data, i + j);
                             if (w < 64000U) s = Radix50.Convert(w);
                         }
                         output.Write(s);
@@ -1117,6 +1116,23 @@ namespace FSX
         {
             Debug(messageLevel, format, args);
             return returnValue;
+        }
+
+        static public Int16 ToInt16L(Byte[] data, Int32 index)
+        {
+            return (BitConverter.IsLittleEndian) ? BitConverter.ToInt16(Reverse(data, index, 2), 0) : BitConverter.ToInt16(data, index);
+        }
+
+        static public UInt16 ToUInt16L(Byte[] data, Int32 index)
+        {
+            return (BitConverter.IsLittleEndian) ? BitConverter.ToUInt16(data, index) : BitConverter.ToUInt16(Reverse(data, index, 2), 0);
+        }
+
+        static private Byte[] Reverse(Byte[] data, Int32 index, Int32 count)
+        {
+            Byte[] buf = new Byte[count];
+            for (Int32 i = count; i > 0; ) buf[--i] = data[index++];
+            return buf;
         }
     }
 }

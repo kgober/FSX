@@ -35,7 +35,7 @@
   <ItemGroup>
     <Compile Include="CBMDOS.cs" />
     <Compile Include="Commodore.cs" />
-    <Compile Include="Disk.cs" />
+    <Compile Include="Volume.cs" />
     <Compile Include="Files11.cs" />
     <Compile Include="HostFS.cs" />
     <Compile Include="ImageDisk.cs" />

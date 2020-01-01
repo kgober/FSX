@@ -85,11 +85,11 @@ namespace FSX
                 get { return addr[index]; }
             }
 
-            public static Inode Get(Volume disk, Int32 iNum)
+            public static Inode Get(Volume volume, Int32 iNum)
             {
                 Int32 block = 2 + (iNum - 1) / 16;
                 Int32 offset = ((iNum - 1) % 16) * 32;
-                return Get(disk[block], offset, iNum);
+                return Get(volume[block], offset, iNum);
             }
 
             public static Inode Get(Block block, Int32 offset, Int32 iNum)
@@ -107,29 +107,29 @@ namespace FSX
             }
         }
 
-        private Volume mDisk;
+        private Volume mVol;
         private String mType;
         private Int32 mRoot;
         private Inode mDirNode;
         private String mDir;
 
-        public Unix(Volume disk)
+        public Unix(Volume volume)
         {
-            mDisk = disk;
+            mVol = volume;
             mType = "Unix";
             mRoot = 1;
-            mDirNode = Inode.Get(disk, 1);
+            mDirNode = Inode.Get(volume, 1);
             mDir = "/";
         }
 
-        public override Volume Disk
+        public override Volume Volume
         {
-            get { return mDisk; }
+            get { return mVol; }
         }
 
         public override String Source
         {
-            get { return mDisk.Source; }
+            get { return mVol.Source; }
         }
 
         public override String Type
@@ -172,7 +172,7 @@ namespace FSX
             Inode dirNode = mDirNode;
             if (fileSpec[0] == '/')
             {
-                dirNode = Inode.Get(mDisk, mRoot);
+                dirNode = Inode.Get(mVol, mRoot);
                 while ((fileSpec.Length != 0) && (fileSpec[0] == '/')) fileSpec = fileSpec.Substring(1);
                 if (fileSpec.Length == 0) fileSpec = "*";
             }
@@ -194,7 +194,7 @@ namespace FSX
             // count number of blocks used
             Int32 n = 0;
             Regex RE = Regex(fileSpec);
-            Byte[] data = ReadFile(mDisk, dirNode);
+            Byte[] data = ReadFile(mVol, dirNode);
             for (Int32 bp = 0; bp < data.Length; bp += 16)
             {
                 Int32 iNum = Program.ToUInt16L(data, bp);
@@ -202,7 +202,7 @@ namespace FSX
                 for (p = 2; p < 16; p++) if (data[bp + p] == 0) break;
                 name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
                 if (!RE.IsMatch(name)) continue;
-                Inode iNode = Inode.Get(mDisk, iNum);
+                Inode iNode = Inode.Get(mVol, iNum);
                 n += (iNode.size + 511) / 512;
             }
 
@@ -215,7 +215,7 @@ namespace FSX
                 for (p = 2; p < 16; p++) if (data[bp + p] == 0) break;
                 name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
                 if (!RE.IsMatch(name)) continue;
-                Inode iNode = Inode.Get(mDisk, iNum);
+                Inode iNode = Inode.Get(mVol, iNum);
                 p = (iNode.flags & 0x6000) >> 13;
                 Char ft = (p == 0) ? '-' : (p == 2) ? 'd' : (p == 1) ? 'c' : 'b';
                 String op = Perm((iNode.flags & 0x01c0) >> 6, iNode.flags & 0x0800);
@@ -256,7 +256,7 @@ namespace FSX
             Inode iNode;
             String name;
             if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return;
-            String buf = encoding.GetString(ReadFile(mDisk, iNode));
+            String buf = encoding.GetString(ReadFile(mVol, iNode));
             Int32 p = 0;
             for (Int32 i = 0; i < buf.Length; i++)
             {
@@ -271,7 +271,7 @@ namespace FSX
             Inode iNode;
             String name;
             if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return;
-            Program.Dump(null, ReadFile(mDisk, iNode), output, 16, 512, Program.DumpOptions.ASCII);
+            Program.Dump(null, ReadFile(mVol, iNode), output, 16, 512, Program.DumpOptions.ASCII);
         }
 
         public override String FullName(String fileSpec)
@@ -287,7 +287,7 @@ namespace FSX
             Inode iNode;
             String name;
             if (!FindFile(mDirNode, mDir, fileSpec, out iNode, out name)) return new Byte[0];
-            return ReadFile(mDisk, iNode);
+            return ReadFile(mVol, iNode);
         }
 
         public override Boolean SaveFS(String fileName, String format)
@@ -304,7 +304,7 @@ namespace FSX
             // start at root directory for absolute paths
             if (pathSpec[0] == '/')
             {
-                dirNode = Inode.Get(mDisk, mRoot);
+                dirNode = Inode.Get(mVol, mRoot);
                 dirName = "/";
                 while ((pathSpec.Length != 0) && (pathSpec[0] == '/')) pathSpec = pathSpec.Substring(1);
             }
@@ -332,7 +332,7 @@ namespace FSX
 
             // find the file in the final directory
             Regex RE = Regex(pathSpec);
-            Byte[] data = ReadFile(mDisk, dirNode);
+            Byte[] data = ReadFile(mVol, dirNode);
             for (Int32 bp = 0; bp < data.Length; bp += 16)
             {
                 Int32 iNum = Program.ToUInt16L(data, bp);
@@ -341,7 +341,7 @@ namespace FSX
                 String name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
                 if (RE.IsMatch(name))
                 {
-                    iNode = Inode.Get(mDisk, iNum);
+                    iNode = Inode.Get(mVol, iNum);
                     if (name == ".")
                     {
                         pathName = dirName;
@@ -369,37 +369,37 @@ namespace FSX
             return Unix.Test;
         }
 
-        // level 0 - check basic disk parameters (return required block size and disk type)
-        // level 1 - check boot block (return disk size and type)
+        // level 0 - check basic volume parameters (return required block size and volume type)
+        // level 1 - check boot block (return volume size and type)
         // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
         // level 3 - check file headers (aka inodes) (return volume size and type)
         // level 4 - check directory structure (return volume size and type)
         // level 5 - check file header allocation (return volume size and type)
         // level 6 - check data block allocation (return volume size and type)
-        public static Boolean Test(Volume disk, Int32 level, out Int32 size, out Type type)
+        public static Boolean Test(Volume volume, Int32 level, out Int32 size, out Type type)
         {
-            // level 0 - check basic disk parameters (return required block size and disk type)
+            // level 0 - check basic volume parameters (return required block size and volume type)
             size = 512;
             type = typeof(Volume);
-            if (disk == null) return false;
-            if (disk.BlockSize != size) return Program.Debug(false, 1, "Unix.Test: invalid block size (is {0:D0}, require {1:D0})", disk.BlockSize, size);
+            if (volume == null) return false;
+            if (volume.BlockSize != size) return Program.Debug(false, 1, "Unix.Test: invalid block size (is {0:D0}, require {1:D0})", volume.BlockSize, size);
             if (level == 0) return true;
 
-            // level 1 - check boot block (return disk size and type)
+            // level 1 - check boot block (return volume size and type)
             if (level == 1)
             {
                 // Unix V5 doesn't support disk labels
                 size = -1;
                 type = typeof(Volume);
-                if (disk.BlockCount < 1) return Program.Debug(false, 1, "Unix.Test: disk too small to contain boot block");
+                if (volume.BlockCount < 1) return Program.Debug(false, 1, "Unix.Test: volume too small to contain boot block");
                 return true;
             }
 
             // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
             size = -1;
             type = null;
-            if (disk.BlockCount < 2) return Program.Debug(false, 1, "Unix.Test: disk too small to contain super-block");
-            Block SB = disk[1]; // super-block
+            if (volume.BlockCount < 2) return Program.Debug(false, 1, "Unix.Test: volume too small to contain super-block");
+            Block SB = volume[1]; // super-block
             Int32 isize = SB.GetUInt16L(0); // number of blocks used for inodes
             Int32 n = SB.GetUInt16L(2); // file system size (in blocks)
             if (isize + 2 > n) return Program.Debug(false, 1, "Unix.Test: super-block i-list exceeds volume size ({0:D0} > {1:D0})", isize + 2, n);
@@ -425,7 +425,7 @@ namespace FSX
             Inode iNode;
             for (UInt16 iNum = 1; iNum <= isize * 16; iNum++)
             {
-                iNode = Inode.Get(disk, iNum);
+                iNode = Inode.Get(volume, iNum);
                 // sometimes a free i-node has 'nlinks' -1. or other values.
                 //if (((iNode.flags & 0x8000) == 0) && (iNode.nlinks != 0) && (iNode.nlinks != 255)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
                 if (((iNode.flags & 0x8000) != 0) && (iNode.nlinks == 0)) return Program.Debug(false, 1, "Unix.Test: i-node {1:D0} is used but has zero link count", iNum);
@@ -435,7 +435,7 @@ namespace FSX
             if (level == 3) return true;
 
             // level 4 - check directory structure (return volume size and type)
-            iNode = Inode.Get(disk, 1);
+            iNode = Inode.Get(volume, 1);
             if ((iNode.flags & 0xe000) != 0xc000) return Program.Debug(false, 1, "Unix.Test: root directory i-node type/used flags invalid (is 0x{0:x4}, require 0xc000)", iNode.flags & 0xe000);
             UInt16[] IMap = new UInt16[isize * 16 + 1]; // inode usage map
             Queue<Int32> DirList = new Queue<Int32>(); // queue of directories to examine
@@ -447,7 +447,7 @@ namespace FSX
                 dNum &= 0xffff;
                 if (IMap[dNum] != 0) return Program.Debug(false, 1, "Unix.Test: directory i-node {0:D0} appears more than once in directory structure", dNum);
                 IMap[dNum]++; // assume a link to this directory from its parent (root directory gets fixed later)
-                Byte[] buf = ReadFile(disk, Inode.Get(disk, dNum));
+                Byte[] buf = ReadFile(volume, Inode.Get(volume, dNum));
                 Boolean df = false;
                 Boolean ddf = false;
                 for (Int32 bp = 0; bp < buf.Length; bp += 16)
@@ -472,7 +472,7 @@ namespace FSX
                     {
                         return Program.Debug(false, 1, "Unix.Test: in directory i={0:D0}, entry \"{1}\" has invalid i-number (is {2:D0}, require 2 <= n <= {3:D0})", dNum, name, iNum, isize * 16);
                     }
-                    else if (((iNode = Inode.Get(disk, iNum)).flags & 0x6000) == 0x4000) // directory
+                    else if (((iNode = Inode.Get(volume, iNum)).flags & 0x6000) == 0x4000) // directory
                     {
                         DirList.Enqueue((dNum << 16) + iNum);
                     }
@@ -490,7 +490,7 @@ namespace FSX
             // level 5 - check file header allocation (return volume size and type)
             for (UInt16 iNum = 1; iNum <= isize * 16; iNum++)
             {
-                iNode = Inode.Get(disk, iNum);
+                iNode = Inode.Get(volume, iNum);
                 if (((iNode.flags & 0x8000) == 0) && (IMap[iNum] != 0)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} is marked free but has {1:D0} link(s)", iNum, IMap[iNum]);
                 if (((iNode.flags & 0x8000) != 0) && (IMap[iNum] == 0)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} is marked used but has no links", iNum);
                 if (((iNode.flags & 0x8000) != 0) && (IMap[iNum] != iNode.nlinks)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} link count mismatch (is {1:D0}, expect {2:D0})", iNum, iNode.nlinks, IMap[iNum]);
@@ -508,7 +508,7 @@ namespace FSX
             UInt16[] BMap = new UInt16[size]; // block usage map
             for (UInt16 iNum = 1; iNum < isize * 16; iNum++)
             {
-                iNode = Inode.Get(disk, iNum);
+                iNode = Inode.Get(volume, iNum);
                 if ((iNode.flags & 0x8000) == 0) continue; // unused i-nodes have no blocks
                 if ((iNode.flags & 0x2000) != 0) continue; // device i-nodes have no blocks
                 n = (iNode.size + 511) / 512; // number of blocks required for file
@@ -520,7 +520,7 @@ namespace FSX
                         Int32 b = iNode[p]; // direct block
                         if (b == 0) continue;
                         if ((b < isize + 2) || (b >= size)) return Program.Debug(false, 1, "Unix.Test: block {0:D0} of i-node {1:D0} falls outside volume block range (is {2:D0}, require {3:D0} <= n < {4:D0}", p, iNum, b, isize + 2, size);
-                        if (b > disk.BlockCount) Program.Debug(1, "Unix.Test: WARNING: block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p, iNum, b, disk.BlockCount);
+                        if (b > volume.BlockCount) Program.Debug(1, "Unix.Test: WARNING: block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p, iNum, b, volume.BlockCount);
                         if (BMap[b] != 0) return Program.Debug(false, 1, "Unix.Test: block {0:D0} of i-node {1:D0} is also allocated to i-node {2:D0}", p, iNum, BMap[b]);
                         BMap[b] = iNum;
                     }
@@ -533,11 +533,11 @@ namespace FSX
                         Int32 i = iNode[p / 256]; // indirect block
                         if (i == 0) continue;
                         if ((i < isize + 2) || (i >= size)) return Program.Debug(false, 1, "Unix.Test: indirect block {0:D0} of i-node {1:D0} falls outside volume block range (is {2:D0}, require {3:D0} <= n < {4:D0}", p / 256, iNum, i, isize + 2, size);
-                        if (i > disk.BlockCount) return Program.Debug(false, 1, "Unix.Test: indirect block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p / 256, iNum, i, disk.BlockCount);
-                        Int32 b = disk[i].GetUInt16L((p % 256) * 2); // direct block
+                        if (i > volume.BlockCount) return Program.Debug(false, 1, "Unix.Test: indirect block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p / 256, iNum, i, volume.BlockCount);
+                        Int32 b = volume[i].GetUInt16L((p % 256) * 2); // direct block
                         if (b == 0) continue;
                         if ((b < isize + 2) || (b >= size)) return Program.Debug(false, 1, "Unix.Test: block {0:D0} of i-node {1:D0} falls outside volume block range (is {2:D0}, require {3:D0} <= n < {4:D0}", p, iNum, b, isize + 2, size);
-                        if (b > disk.BlockCount) Program.Debug(1, "Unix.Test: WARNING: block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p, iNum, b, disk.BlockCount);
+                        if (b > volume.BlockCount) Program.Debug(1, "Unix.Test: WARNING: block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p, iNum, b, volume.BlockCount);
                         if (BMap[b] != 0) return Program.Debug(false, 1, "Unix.Test: block {0:D0} of i-node {1:D0} is also allocated to i-node {2:D0}", p, iNum, BMap[b]);
                         BMap[b] = iNum;
                     }
@@ -567,8 +567,8 @@ namespace FSX
             while (p != 0)
             {
                 if ((p < isize + 2) || (p >= size)) return Program.Debug(false, 1, "Unix.Test: link block {0:D0} in free block chain falls outside volume block range (require {1:D0} <= n < {2:D0})", p, isize + 2, size);
-                if (p >= disk.BlockCount) return Program.Debug(false, 1, "Unix.Test: link block {0:D0} in free block chain falls outside image block range (expect n < {1:D0})", p, disk.BlockCount);
-                Block B = disk[p];
+                if (p >= volume.BlockCount) return Program.Debug(false, 1, "Unix.Test: link block {0:D0} in free block chain falls outside image block range (expect n < {1:D0})", p, volume.BlockCount);
+                Block B = volume[p];
                 n = B.GetUInt16L(0);
                 for (Int32 i = 0; i < 2 * n; i += 2)
                 {
@@ -593,7 +593,7 @@ namespace FSX
 
     partial class Unix
     {
-        private static Byte[] ReadFile(Volume disk, Inode iNode)
+        private static Byte[] ReadFile(Volume volume, Inode iNode)
         {
             Byte[] buf = new Byte[iNode.size];
             if ((iNode.flags & 0x1000) == 0)
@@ -602,9 +602,9 @@ namespace FSX
                 for (Int32 p = 0; p < iNode.size; p += 512)
                 {
                     Int32 b = iNode[p / 512]; // direct block
-                    if ((b == 0) || (b >= disk.BlockCount)) continue;
+                    if ((b == 0) || (b >= volume.BlockCount)) continue;
                     Int32 c = iNode.size - p;
-                    disk[b].CopyTo(buf, p, 0, (c > 512) ? 512 : c);
+                    volume[b].CopyTo(buf, p, 0, (c > 512) ? 512 : c);
                 }
             }
             else
@@ -615,11 +615,11 @@ namespace FSX
                 {
                     Int32 b = p / 512;
                     Int32 i = iNode[b / 256]; // indirect block
-                    if ((i == 0) || (i >= disk.BlockCount)) continue;
-                    b = disk[i].GetUInt16L((b % 256) * 2); // direct block
-                    if ((b == 0) || (b >= disk.BlockCount)) continue;
+                    if ((i == 0) || (i >= volume.BlockCount)) continue;
+                    b = volume[i].GetUInt16L((b % 256) * 2); // direct block
+                    if ((b == 0) || (b >= volume.BlockCount)) continue;
                     Int32 c = iNode.size - p;
-                    disk[b].CopyTo(buf, p, 0, (c > 512) ? 512 : c);
+                    volume[b].CopyTo(buf, p, 0, (c > 512) ? 512 : c);
                 }
             }
             return buf;

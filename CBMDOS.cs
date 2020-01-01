@@ -78,30 +78,30 @@ namespace FSX
             }
         }
 
-        private Volume mDisk;
+        private Volume mVol;
         private String mType;
         private Int32 mDirTrack;
         private Int32 mBlocksFree;
 
-        public CBMDOS(CHSVolume disk)
+        public CBMDOS(CHSVolume volume)
         {
-            mDisk = disk;
-            mDirTrack = (disk.MaxCylinder <= 42) ? 18 : 39;
-            Byte ver = disk[mDirTrack, 0, 0][2];
+            mVol = volume;
+            mDirTrack = (volume.MaxCylinder <= 42) ? 18 : 39;
+            Byte ver = volume[mDirTrack, 0, 0][2];
             if (ver == 1) mType = "CBMDOS1";
             else if (ver == 65) mType = "CBMDOS2";
-            else if (ver == 67) mType = (disk.MaxCylinder > 77) ? "CBMDOS2.7" : "CBMDOS2.5";
+            else if (ver == 67) mType = (volume.MaxCylinder > 77) ? "CBMDOS2.7" : "CBMDOS2.5";
             mBlocksFree = CountFreeBlocks();
         }
 
-        public override Volume Disk
+        public override Volume Volume
         {
-            get { return mDisk; }
+            get { return mVol; }
         }
 
         public override String Source
         {
-            get { return mDisk.Source; }
+            get { return mVol.Source; }
         }
 
         public override String Type
@@ -127,7 +127,7 @@ namespace FSX
         {
             if ((fileSpec == null) || (fileSpec.Length == 0)) fileSpec = "*";
             Regex RE = Regex(fileSpec);
-            Block B = mDisk[mDirTrack, 0, 0];
+            Block B = mVol[mDirTrack, 0, 0];
             Byte ver = B[2];
             Byte[] buf = new Byte[24];
             Int32 p = (ver == 67) ? 6 : 144;
@@ -155,7 +155,7 @@ namespace FSX
             Int32 s = 1;
             while (t != 0)
             {
-                B = mDisk[t, 0, s];
+                B = mVol[t, 0, s];
                 for (Int32 bp = 2; bp < B.Size; bp += 32)
                 {
                     Byte b = B[bp];
@@ -236,7 +236,7 @@ namespace FSX
                 s = f.Sector;
                 while (t != 0)
                 {
-                    Block B = mDisk[t, 0, s];
+                    Block B = mVol[t, 0, s];
                     t = B[0];
                     s = B[1];
                     p += (t != 0) ? BPS : (includeLinkBytes) ? s + 1 : s - 1;
@@ -250,7 +250,7 @@ namespace FSX
             s = f.Sector;
             while (t != 0)
             {
-                Block B = mDisk[t, 0, s];
+                Block B = mVol[t, 0, s];
                 t = B[0];
                 s = B[1];
                 Int32 n = (t != 0) ? BPS : (includeLinkBytes) ? s + 1 : s - 1;
@@ -265,23 +265,23 @@ namespace FSX
             if ((fileName == null) || (fileName.Length == 0)) return false;
             if (fileName.IndexOf('.') == -1)
             {
-                // TODO: infer file extension based on disk size and/or DOS version
+                // TODO: infer file extension based on volume size and/or DOS version
             }
 
             Boolean ef = false; // whether any sector errors need to be recorded
-            for (Int32 i = 0; i < mDisk.BlockCount; i++) if ((mDisk[i] is Sector) && ((mDisk[i] as Sector).ErrorCode > 1)) ef = true;
+            for (Int32 i = 0; i < mVol.BlockCount; i++) if ((mVol[i] is Sector) && ((mVol[i] as Sector).ErrorCode > 1)) ef = true;
             FileStream f = new FileStream(fileName, FileMode.Create);
             Byte[] buf = new Byte[256];
-            for (Int32 i = 0; i < mDisk.BlockCount; i++)
+            for (Int32 i = 0; i < mVol.BlockCount; i++)
             {
-                mDisk[i].CopyTo(buf, 0);
+                mVol[i].CopyTo(buf, 0);
                 f.Write(buf, 0, 256);
             }
             if (ef)
             {
-                for (Int32 i = 0; i < mDisk.BlockCount; i++)
+                for (Int32 i = 0; i < mVol.BlockCount; i++)
                 {
-                    buf[0] = (Byte)((mDisk[i] is Sector) ? (mDisk[i] as Sector).ErrorCode : 1);
+                    buf[0] = (Byte)((mVol[i] is Sector) ? (mVol[i] as Sector).ErrorCode : 1);
                     f.Write(buf, 0, 1);
                 }
             }
@@ -312,7 +312,7 @@ namespace FSX
             Int32 s = 1;
             while (t != 0)
             {
-                Block B = mDisk[t, 0, s];
+                Block B = mVol[t, 0, s];
                 for (Int32 bp = 2; bp < B.Size; bp += 32)
                 {
                     Byte b = B[bp];
@@ -330,7 +330,7 @@ namespace FSX
 
         private Int32 CountFreeBlocks()
         {
-            Block B = mDisk[mDirTrack, 0, 0];
+            Block B = mVol[mDirTrack, 0, 0];
             if (B[2] != 67) // DOS 1.0 / 2.0
             {
                 Int32 n = 0;
@@ -341,10 +341,10 @@ namespace FSX
             else // DOS 2.5 / 2.7
             {
                 Int32 n = 0;
-                Int32 c = (mDisk.MaxCylinder > 77) ? 4 : 2;
+                Int32 c = (mVol.MaxCylinder > 77) ? 4 : 2;
                 for (Int32 j = 0; j < c; j++)
                 {
-                    B = mDisk[B[0], 0, B[1]];
+                    B = mVol[B[0], 0, B[1]];
                     Int32 l = 6 + (B[5] - B[4]) * 5;
                     for (Int32 i = 6; i < l; i += 5) n += B[i];
                 }
@@ -360,29 +360,29 @@ namespace FSX
             return CBMDOS.Test;
         }
 
-        // level 0 - check basic disk parameters (return required block size and disk type)
-        // level 1 - check boot block (return disk size and type)
+        // level 0 - check basic volume parameters (return required block size and volume type)
+        // level 1 - check boot block (return volume size and type)
         // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
         // level 3 - check directory structure (return volume size and type)
         // level 4 - check file headers (aka inodes) (return volume size and type)
         // level 5 - check file header allocation (return volume size and type)
         // level 6 - check data block allocation (return volume size and type)
         // note: levels 3 and 4 are reversed because this makes more sense for CBMDOS volumes
-        public static Boolean Test(Volume dsk, Int32 level, out Int32 size, out Type type)
+        public static Boolean Test(Volume vol, Int32 level, out Int32 size, out Type type)
         {
-            // level 0 - check basic disk parameters (return required block size and disk type)
+            // level 0 - check basic volume parameters (return required block size and volume type)
             size = 256;
             type = typeof(CHSVolume);
-            if (dsk == null) return false;
-            if (!(dsk is CHSVolume)) return Program.Debug(false, 1, "CBMDOS.Test: disk must be track-oriented (e.g. 'CHSDisk')");
-            CHSVolume disk = dsk as CHSVolume;
-            if (disk.BlockSize != size) return Program.Debug(false, 1, "CBMDOS.Test: invalid block size (is {0:D0}, require {1:D0})", disk.BlockSize, size);
-            if (disk.MinHead != disk.MaxHead) return Program.Debug(false, 1, "CBMDOS.Test: disk must be logically single-sided");
-            if (disk.MinCylinder < 1) return Program.Debug(false, 1, "CBMDOS.Test: disk track numbering must start at 1 (is {0:D0})", disk.MinCylinder);
-            if (disk.MinSector() != 0) return Program.Debug(false, 1, "CBMDOS.Test: disk sector numbering must start at 0 (is {0:D0})", disk.MinSector());
+            if (vol == null) return false;
+            if (!(vol is CHSVolume)) return Program.Debug(false, 1, "CBMDOS.Test: volume must be track-oriented (e.g. 'CHSVolume')");
+            CHSVolume volume = vol as CHSVolume;
+            if (volume.BlockSize != size) return Program.Debug(false, 1, "CBMDOS.Test: invalid block size (is {0:D0}, require {1:D0})", volume.BlockSize, size);
+            if (volume.MinHead != volume.MaxHead) return Program.Debug(false, 1, "CBMDOS.Test: volume must be logically single-sided");
+            if (volume.MinCylinder < 1) return Program.Debug(false, 1, "CBMDOS.Test: volume track numbering must start at 1 (is {0:D0})", volume.MinCylinder);
+            if (volume.MinSector() != 0) return Program.Debug(false, 1, "CBMDOS.Test: volume sector numbering must start at 0 (is {0:D0})", volume.MinSector());
             if (level == 0) return true;
 
-            // level 1 - check boot block (return disk size and type)
+            // level 1 - check boot block (return volume size and type)
             if (level == 1)
             {
                 size = -1;
@@ -394,12 +394,12 @@ namespace FSX
             // treat the first block of the BAM/directory chain as the 'volume descriptor'
             size = -1;
             type = null;
-            Int32 t = (disk.MaxCylinder <= 42) ? 18 : 39;
+            Int32 t = (volume.MaxCylinder <= 42) ? 18 : 39;
             Int32 s = 0;
-            Track T = GetTrack(disk, t);
-            if (T == null) return Program.Debug(false, 1, "CBMDOS.Test: disk image does not include directory track {0:D0}", t);
+            Track T = GetTrack(volume, t);
+            if (T == null) return Program.Debug(false, 1, "CBMDOS.Test: volume image does not include directory track {0:D0}", t);
             Block B = T.Sector(s);
-            if (B == null) return Program.Debug(false, 1, "CBMDOS.Test: disk image does not include directory header block {0:D0}/{1:D0}", t, s);
+            if (B == null) return Program.Debug(false, 1, "CBMDOS.Test: volume image does not include directory header block {0:D0}/{1:D0}", t, s);
             Byte fmt = B[2];
             if ((fmt != 0x01) && (fmt != 0x41) && (fmt != 0x43)) return Program.Debug(false, 1, "CBMDOS.Test: BAM format byte invalid (is 0x{0:x2}, expect 0x01, 0x41, or 0x43)", fmt);
             if ((t == 18) && (T.Length == 20) && (fmt != 0x01)) return Program.Debug(false, 1, "CBMDOS.Test: BAM format byte incorrect (is 0x{0:x2}, expect 0x01)", fmt);
@@ -412,26 +412,26 @@ namespace FSX
             if ((fmt == 0x41) && (B[166] != 0x41)) return Program.Debug(false, 1, "CBMDOS.Test: directory header format byte invalid (is 0x{0:x2}, expect 0x41 'A')", B[166]);
             if ((fmt == 0x43) && (B[27] != 0x32)) return Program.Debug(false, 1, "CBMDOS.Test: directory header version byte invalid (is 0x{0:x2}, expect 0x32 '2')", B[27]);
             if ((fmt == 0x43) && (B[28] != 0x43)) return Program.Debug(false, 1, "CBMDOS.Test: directory header format byte invalid (is 0x{0:x2}, expect 0x43 'C')", B[28]);
-            size = (fmt == 0x01) ? 690 : (fmt == 0x41) ? 683 : (disk.MaxCylinder <= 77) ? 2083 : 4166;
+            size = (fmt == 0x01) ? 690 : (fmt == 0x41) ? 683 : (volume.MaxCylinder <= 77) ? 2083 : 4166;
             type = typeof(CBMDOS);
             if (level == 2) return true;
 
             // level 3 - check directory structure (return volume size and type)
-            Int32 dc = (fmt != 0x43) ? 1 : (disk.MaxCylinder <= 77) ? 3 : 5; // number of blocks that precede first directory block
+            Int32 dc = (fmt != 0x43) ? 1 : (volume.MaxCylinder <= 77) ? 3 : 5; // number of blocks that precede first directory block
             Int32 bc = (fmt != 0x43) ? 0 : 1; // number of blocks that precede first BAM block
             Int32 maxSect = -1;
-            for (Int32 i = disk.MinCylinder; i <= disk.MaxCylinder; i++)
+            for (Int32 i = volume.MinCylinder; i <= volume.MaxCylinder; i++)
             {
-                T = GetTrack(disk, i);
+                T = GetTrack(volume, i);
                 if ((T != null) && (T.MaxSector > maxSect)) maxSect = T.MaxSector;
             }
-            Int32[,] BMap = new Int32[disk.MaxCylinder + 1, maxSect + 1];
+            Int32[,] BMap = new Int32[volume.MaxCylinder + 1, maxSect + 1];
             Int32 sc = 0; // sectors used count
             Int32 st = 1; // starting track expected in next BAM block (DOS 2.5 / 2.7 only)
             while (t != 0)
             {
                 sc++;
-                T = GetTrack(disk, t);
+                T = GetTrack(volume, t);
                 if (T == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid directory chain at segment {0:D0}: track not found for {1:D0}/{2:D0}", sc, t, s);
                 B = T.Sector(s);
                 if (B == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid directory chain at segment {0:D0}: sector not found for {1:D0}/{2:D0}", sc, t, s);
@@ -468,7 +468,7 @@ namespace FSX
                         }
                     }
                 }
-                if ((B[0] == 0) && (fmt == 0x43) && (st != disk.MaxCylinder + 1)) return Program.Debug(false, 1, "CBMDOS.Test: BAM coverage error at {0:D0}/{1:D0}: limit track invalid (is {2:D0}, expect {3:D0})", t, s, st, disk.MaxCylinder + 1);
+                if ((B[0] == 0) && (fmt == 0x43) && (st != volume.MaxCylinder + 1)) return Program.Debug(false, 1, "CBMDOS.Test: BAM coverage error at {0:D0}/{1:D0}: limit track invalid (is {2:D0}, expect {3:D0})", t, s, st, volume.MaxCylinder + 1);
                 t = B[0];
                 s = B[1];
             }
@@ -476,11 +476,11 @@ namespace FSX
 
             // level 4 - check file headers (aka inodes) (return volume size and type)
             Int32 fc = 0;
-            t = (disk.MaxCylinder <= 42) ? 18 : 39;
+            t = (volume.MaxCylinder <= 42) ? 18 : 39;
             s = 1;
             while (t != 0)
             {
-                B = GetTrack(disk, t).Sector(s);
+                B = GetTrack(volume, t).Sector(s);
                 Int32 l = (B[0] == 0) ? B[1] + 1 : B.Size; // where this block's data ends
                 for (Int32 bp = 2; bp < l; bp += 32)
                 {
@@ -499,7 +499,7 @@ namespace FSX
                     while (ft != 0)
                     {
                         ct++;
-                        if ((T = GetTrack(disk, ft)) == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid start track in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0} <= n <= {5:D0})", t, s, bp, ft, disk.MinCylinder, disk.MaxCylinder);
+                        if ((T = GetTrack(volume, ft)) == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid start track in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0} <= n <= {5:D0})", t, s, bp, ft, volume.MinCylinder, volume.MaxCylinder);
                         if (T.Sector(fs) == null) return Program.Debug(false, 1, "CBMDOS.Test: invalid start sector in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect {4:D0} <= n <= {5:D0})", t, s, bp, fs, T.MinSector, T.MaxSector);
                         if (BMap[ft, fs] != 0)
                         {
@@ -535,11 +535,11 @@ namespace FSX
 
     partial class CBMDOS
     {
-        private static Track GetTrack(CHSVolume disk, Int32 track)
+        private static Track GetTrack(CHSVolume volume, Int32 track)
         {
-            if (track < disk.MinCylinder) return null;
-            if (track > disk.MaxCylinder) return null;
-            return disk[track, disk.MinHead];
+            if (track < volume.MinCylinder) return null;
+            if (track > volume.MaxCylinder) return null;
+            return volume[track, volume.MinHead];
         }
 
         // convert a CBMDOS wildcard pattern to a Regex

@@ -1,4 +1,4 @@
-// Disk.cs
+// Volume.cs
 // Copyright © 2019 Kenneth Gober
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy

@@ -90,26 +90,26 @@ namespace FSX
 
         private static readonly String[] MONTHS = { null, "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 
-        private Volume mDisk;
+        private Volume mVol;
         private Int32 mDirStart;
         private ClusteredVolume mDir;
 
-        public RT11(Volume disk)
+        public RT11(Volume volume)
         {
-            if (disk.BlockSize != 512) throw new ArgumentException("RT11 volume block size must be 512.");
-            mDisk = disk;
-            mDirStart = IsChecksumOK(disk[1], 510) ? disk[1].GetUInt16L(0x1d4) : defaultDirStart;
-            mDir = new ClusteredVolume(disk, 2, mDirStart - 2, 32);
+            if (volume.BlockSize != 512) throw new ArgumentException("RT11 volume block size must be 512.");
+            mVol = volume;
+            mDirStart = IsChecksumOK(volume[1], 510) ? volume[1].GetUInt16L(0x1d4) : defaultDirStart;
+            mDir = new ClusteredVolume(volume, 2, mDirStart - 2, 32);
         }
 
-        public override Volume Disk
+        public override Volume Volume
         {
-            get { return mDisk; }
+            get { return mVol; }
         }
 
         public override String Source
         {
-            get { return mDisk.Source; }
+            get { return mVol.Source; }
         }
 
         public override String Type
@@ -136,7 +136,7 @@ namespace FSX
             if ((fileSpec == null) || (fileSpec.Length == 0)) fileSpec = "*.*";
             Regex RE = Regex(fileSpec);
             output.WriteLine(DateTime.Today.ToString(" dd-MMM-yyyy"));
-            Block B = mDisk[1];
+            Block B = mVol[1];
             UInt16 w = B.GetUInt16L(0x1d6);
             if ((w < 64000) & IsASCIIText(B, 0x01d8, 36))
             {
@@ -309,7 +309,7 @@ namespace FSX
             Int32 p = 0;
             for (Int32 i = 0; i < f.BlockCount; i++)
             {
-                mDisk[f.StartBlock + i].CopyTo(buf, p);
+                mVol[f.StartBlock + i].CopyTo(buf, p);
                 p += 512;
             }
             return buf;
@@ -320,7 +320,7 @@ namespace FSX
             // RX01 and RX02 images should be written as physical images (including track 0)
             // all other images (including RX50) should be written as logical images
             FileStream f = new FileStream(fileName, FileMode.Create);
-            Volume d = mDisk;
+            Volume d = mVol;
             Int32 size;
             Type type;
             if (!Test(d, 3, out size, out type)) return false;
@@ -385,7 +385,7 @@ namespace FSX
                         for (Int32 s = 0; s < 26; s++)
                         {
                             Int32 lsn = map[t, s];
-                            mDisk[lsn / SPB].CopyTo(buf, 0, (lsn % SPB) * d.BlockSize, d.BlockSize);
+                            mVol[lsn / SPB].CopyTo(buf, 0, (lsn % SPB) * d.BlockSize, d.BlockSize);
                             f.Write(buf, 0, d.BlockSize);
                         }
                     }
@@ -474,42 +474,42 @@ namespace FSX
             return RT11.Test;
         }
 
-        // level 0 - check basic disk parameters (return required block size and disk type)
-        // level 1 - check boot block (return disk size and type)
+        // level 0 - check basic volume parameters (return required block size and volume type)
+        // level 1 - check boot block (return volume size and type)
         // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
         // level 3 - check directory structure (return volume size and type)
         // level 4 - check file headers (aka inodes) (return volume size and type)
         // level 5 - check file header allocation (return volume size and type)
         // level 6 - check data block allocation (return volume size and type)
         // note: levels 3 and 4 are reversed because this makes more sense for RT-11 volumes
-        public static Boolean Test(Volume disk, Int32 level, out Int32 size, out Type type)
+        public static Boolean Test(Volume volume, Int32 level, out Int32 size, out Type type)
         {
-            // level 0 - check basic disk parameters (return required block size and disk type)
+            // level 0 - check basic volume parameters (return required block size and volume type)
             size = 512;
             type = typeof(Volume);
-            if (disk == null) return false;
-            if (disk.BlockSize != size) return Program.Debug(false, 1, "RT11.Test: invalid block size (is {0:D0}, require {1:D0})", disk.BlockSize, size);
+            if (volume == null) return false;
+            if (volume.BlockSize != size) return Program.Debug(false, 1, "RT11.Test: invalid block size (is {0:D0}, require {1:D0})", volume.BlockSize, size);
             if (level == 0) return true;
 
-            // level 1 - check boot block (return disk size and type)
+            // level 1 - check boot block (return volume size and type)
             if (level == 1)
             {
                 size = -1;
                 type = typeof(Volume);
-                if (disk.BlockCount < 1) return Program.Debug(false, 1, "RT11.Test: disk too small to contain boot block");
+                if (volume.BlockCount < 1) return Program.Debug(false, 1, "RT11.Test: volume too small to contain boot block");
                 return true;
             }
 
             // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
             size = -1;
             type = null;
-            if (disk.BlockCount < 2) return Program.Debug(false, 1, "RT11.Test: disk too small to contain home block");
+            if (volume.BlockCount < 2) return Program.Debug(false, 1, "RT11.Test: volume too small to contain home block");
             type = typeof(RT11);
             if (level == 2) return true;
 
             // level 3 - check directory structure (return volume size and type)
-            if (disk.BlockCount < 8) return Program.Debug(false, 1, "RT11.Test: disk too small to contain directory segment {0:D0}", 1);
-            ClusteredVolume Dir = new ClusteredVolume(disk, 2, 4, 32); // start at 4 so that segment 1 falls on block 6
+            if (volume.BlockCount < 8) return Program.Debug(false, 1, "RT11.Test: volume too small to contain directory segment {0:D0}", 1);
+            ClusteredVolume Dir = new ClusteredVolume(volume, 2, 4, 32); // start at 4 so that segment 1 falls on block 6
             // check for problems with segment chain structure and count segments in use
             Int32[] SS = new Int32[32]; // segments seen (to detect cycles)
             Int32 sc = 0; // segment count
@@ -520,7 +520,7 @@ namespace FSX
                 SS[s] = ++sc;
                 s = Dir[s].GetUInt16L(2); // next directory segment
                 if (s > 31) return Program.Debug(false, 1, "RT11.Test: invalid directory segment chain: segment {0:D0} invalid", s);
-                if (s >= Dir.BlockCount) return Program.Debug(false, 1, "RT11.Test: disk too small to contain directory segment {0:D0}", s);
+                if (s >= Dir.BlockCount) return Program.Debug(false, 1, "RT11.Test: volume too small to contain directory segment {0:D0}", s);
             }
             // check directory segment consistency (and calculate volume size)
             Int32 ns = -1; // total directory segments
@@ -616,7 +616,7 @@ namespace FSX
                     Int32 n = D.GetUInt16L(sp + 8); // file length (in blocks)
                     for (Int32 i = 0; i < n; i++)
                     {
-                        if ((bp + i == disk.BlockCount) & ((esw & E.MPTY) == 0)) Program.Debug(1, "RT11.Test: WARNING: blocks {0:D0} and higher of file \"{1}\" fall outside image block range (is {2:D0}, expect n < {3:D0})", bp + i, fn, disk.BlockCount);
+                        if ((bp + i == volume.BlockCount) & ((esw & E.MPTY) == 0)) Program.Debug(1, "RT11.Test: WARNING: blocks {0:D0} and higher of file \"{1}\" fall outside image block range (is {2:D0}, expect n < {3:D0})", bp + i, fn, volume.BlockCount);
                         if (BMap[bp + i]) return Program.Debug(false, 1, "RT11.Test: block {0:D0} of file \"{1}\" is also allocated to another file", bp + i, fn);
                         BMap[bp + i] = true;
                     }

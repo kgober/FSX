@@ -20,18 +20,18 @@
 // SOFTWARE.
 
 
-// To facilitate accessing disks whose file system type is unknown, each FileSystem
+// To facilitate accessing volumes whose file system type is unknown, each FileSystem
 // may provide a Test method that can be used to check for the presence of on-disk
 // data structures in increasing levels of detail, until the file system type and size
 // can be reliably inferred.  Each FileSystem that supports this should implement the
 // IFileSystemAuto interface, with the implementing class containing a public static
 // GetTest() method that returns a 'TestDelegate'.  When the program needs to identify
 // a file system type, it will invoke TestDelegate as needed:
-//   Boolean TestDelegate(Disk disk, Int32 level, out Int32 size, out Type type);
+//   Boolean TestDelegate(Volume volume, Int32 level, out Int32 size, out Type type);
 //
 // To enable comparison of Test results, 'level' should be defined as follows:
-//  0 - check basic disk parameters (return required block size and disk type)
-//  1 - check boot block (return disk size and type)
+//  0 - check basic volume parameters (return required block size and volume type)
+//  1 - check boot block (return volume size and type)
 //  2 - check volume descriptor (aka home/super block) (return volume size and type)
 //  3 - check file headers (aka inodes) (return volume size and type)
 //  4 - check directory structure (return volume size and type)
@@ -39,22 +39,22 @@
 //  6 - check data block allocation (return volume size and type)
 //
 // Each test method should return true if the requirements for the given level (and
-// all lower levels) are met by the disk, or false otherwise.  If a test method does
+// all lower levels) are met by the volume, or false otherwise.  If a test method does
 // not implement a given level (but it does implement higher ones) it should return
 // true.  Returning true is an invitation to be called again with a higher level;
 // returning false indicates that higher levels are unlikely to be useful/possible.
 //
 // For level 0, each test method also specifies via 'out' parameters the block size
-// and disk type required (e.g., Commodore disks must have 256-byte blocks and be
-// track/sector addressable).  For level 1, each test method specifies the disk size
-// and disk type required, and for levels 2 and higher they specify the volume size
+// and volume type required (e.g., Commodore volumes must have 256-byte blocks and be
+// track/sector addressable).  For level 1, each test method specifies the volume size
+// and volume type required, and for levels 2 and higher they specify the volume size
 // and volume type that would be most suitable.
 //
-// For level 1, a size of -1 means that no specific disk size can be determined,
-// which is not uncommon for images of disks whose sizes were fixed by the hardware,
+// For level 1, a size of -1 means that no specific volume size can be determined,
+// which is not uncommon for images of volumes whose sizes were fixed by the hardware,
 // or stored on the disk controller rather than on the disk itself.  For levels 2
 // and higher a size of -1 means the size can't be determined without examining the
-// disk image at a higher level (e.g., the RT-11 home block doesn't include the
+// volume image at a higher level (e.g., the RT-11 home block doesn't include the
 // volume size, so a level 3 check is required).
 
 
@@ -70,7 +70,7 @@ namespace FSX
 
     partial class FileSystem
     {
-        public delegate Boolean TestDelegate(Volume disk, Int32 level, out Int32 size, out Type type);
+        public delegate Boolean TestDelegate(Volume volume, Int32 level, out Int32 size, out Type type);
     }
 
     class Auto
@@ -78,12 +78,12 @@ namespace FSX
         private struct Entry
         {
             public FileSystem.TestDelegate Test;
-            public Volume Disk;
+            public Volume Volume;
 
-            public Entry(FileSystem.TestDelegate test, Volume disk)
+            public Entry(FileSystem.TestDelegate test, Volume volume)
             {
                 Test = test;
-                Disk = disk;
+                Volume = volume;
             }
         }
 
@@ -108,10 +108,10 @@ namespace FSX
             }
         }
 
-        public static Boolean GetInfo(String typeName, out Int32 blockSize, out Type diskType)
+        public static Boolean GetInfo(String typeName, out Int32 blockSize, out Type volumeType)
         {
             blockSize = -1;
-            diskType = null;
+            volumeType = null;
             if ((typeName == null) || (typeName.Length == 0)) return false;
             if (!typeName.StartsWith("FSX.", StringComparison.OrdinalIgnoreCase)) typeName = String.Concat("FSX.", typeName);
             Type type = Type.GetType(typeName, false, true);
@@ -120,7 +120,7 @@ namespace FSX
             if (minfo == null) return false;
             FileSystem.TestDelegate method = minfo.Invoke(null, null) as FileSystem.TestDelegate;
             if (method == null) return false;
-            method(null, 0, out blockSize, out diskType);
+            method(null, 0, out blockSize, out volumeType);
             return true;
         }
 
@@ -128,7 +128,7 @@ namespace FSX
         {
             if (sTests == null) Init();
 
-            // try to provide each file system test with a disk having the correct block size
+            // try to provide each file system test with a volume having the correct block size
             List<Entry> L = new List<Entry>();
             Int32 size = -1;
             Type type = null;
@@ -145,11 +145,11 @@ namespace FSX
                     }
                     if ((size != -1) && (size != image.BlockSize) && ((size % image.BlockSize) == 0))
                     {
-                        Volume disk = new ClusteredVolume(image, size / image.BlockSize, 0);
-                        if (test(disk, level, out size, out type))
+                        Volume volume = new ClusteredVolume(image, size / image.BlockSize, 0);
+                        if (test(volume, level, out size, out type))
                         {
-                            Program.Debug(2, "Pass: {0} level {1:D0} (with ClusteredDisk)", test.Method.DeclaringType.Name, level);
-                            L.Add(new Entry(test, disk));
+                            Program.Debug(2, "Pass: {0} level {1:D0} (with ClusteredVolume)", test.Method.DeclaringType.Name, level);
+                            L.Add(new Entry(test, volume));
                             continue;
                         }
                     }
@@ -162,16 +162,16 @@ namespace FSX
                 while (true)
                 {
                     level++;
-                    Volume disk = null;
+                    Volume volume = null;
                     List<Entry> L2 = new List<Entry>();
                     foreach (Entry e in L)
                     {
                         Int32 s;
                         Type t;
-                        if (e.Test(e.Disk, level, out s, out t))
+                        if (e.Test(e.Volume, level, out s, out t))
                         {
                             Program.Debug(2, "Pass: {0} level {1:D0}", e.Test.Method.DeclaringType.Name, level);
-                            disk = e.Disk;
+                            volume = e.Volume;
                             size = s;
                             type = t;
                             L2.Add(e);
@@ -180,8 +180,8 @@ namespace FSX
                     if ((level > 1) && (L2.Count == 1))
                     {
                         // if only one test passed (and we got past level 1), choose that type
-                        if ((size != -1) && (size != disk.BlockCount)) disk = new PaddedVolume(disk, size - disk.BlockCount);
-                        return ConstructFS(type, disk);
+                        if ((size != -1) && (size != volume.BlockCount)) volume = new PaddedVolume(volume, size - volume.BlockCount);
+                        return ConstructFS(type, volume);
                     }
                     else if (L2.Count == 0)
                     {
@@ -213,7 +213,7 @@ namespace FSX
             Type[] argTypes = new Type[1]; // constructor parameter types
             argTypes[0] = image.GetType();
             ConstructorInfo cinfo = type.GetConstructor(argTypes);
-            if (cinfo == null) return null; // this fs type doesn't have a constructor accepting this disk type
+            if (cinfo == null) return null; // this fs type doesn't have a constructor accepting this volume type
             Object[] args = new Object[1]; // constructor arguments
             args[0] = image;
             return cinfo.Invoke(args) as FileSystem;

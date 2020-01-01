@@ -32,11 +32,11 @@
 // improve argument parsing
 // improve 'force' mount of damaged or unrecognizable volumes
 // allow output redirection
-// allow demand-loading from non-compressed disk image files rather than pre-loading entire file
+// allow demand-loading from non-compressed image files rather than pre-loading entire file
 // add support for 'raw' volumes (to facilitate examination of unrecognized volumes)
 // add support for FAT12 volumes
 // add support for FAT16 volumes
-// add support for CP/M disk images
+// add support for CP/M images
 // add support for ISO-9660 volumes
 // add support for 7-Zip files (.7z)
 // add support for ZIP files
@@ -481,8 +481,8 @@ namespace FSX
                         {
                             if ((type == typeof(LBAVolume)) || (type == typeof(Volume)))
                             {
-                                Volume disk = new LBAVolume(s, data, size);
-                                return Auto.ConstructFS(t, disk);
+                                Volume volume = new LBAVolume(s, data, size);
+                                return Auto.ConstructFS(t, volume);
                             }
                             else if (type == typeof(CHSVolume))
                             {
@@ -511,7 +511,7 @@ namespace FSX
             //    if (IndexOf(Encoding.ASCII, "DECRT11A    ", data, 512, 512) == 0x3f0)
             //    {
             //        // RT-11 .ISO image file (e.g. RT11DV10.ISO)
-            //        LBADisk d = new LBADisk(s, data, 512);
+            //        LBAVolume d = new LBAVolume(s, data, 512);
             //        Int32 size;
             //        Type type;
             //        if (RT11.Test(d, 5, out size, out type)) return new RT11(d); // RT-11 .ISO special format fails level 6 check
@@ -772,8 +772,8 @@ namespace FSX
         {
             if (image is CHSVolume)
             {
-                CHSVolume disk = image as CHSVolume;
-                if ((disk.MaxCylinder < 80) && (disk.MinHead == disk.MaxHead) && (disk.MaxSector(disk.MinCylinder, disk.MinHead) == 26) && (disk.BlockSize == 128 || disk.BlockSize == 256))
+                CHSVolume volume = image as CHSVolume;
+                if ((volume.MaxCylinder < 80) && (volume.MinHead == volume.MaxHead) && (volume.MaxSector(volume.MinCylinder, volume.MinHead) == 26) && (volume.BlockSize == 128 || volume.BlockSize == 256))
                 {
                     // DEC RX01 Floppy - IBM 3740 format (8" SSSD diskette, 77 tracks, 26 sectors)
                     // DEC RX02 Floppy - like RX01 format, but using MFM for sector data (not FM)
@@ -787,18 +787,18 @@ namespace FSX
                     // data transfer with other systems, and removing the need to reformat disks.
                     // 'Soft' sector interleave is 2:1, with a 6 sector track-to-track skew.
                     Debug(2, "RX01/RX02 image, also testing with interleave applied");
-                    Int32 n = 512 / disk.BlockSize;
-                    Volume d2 = new ClusteredVolume(new InterleavedVolume(disk, 2, 0, 6, 26), n, 26); // if image includes track 0
-                    Volume d3 = new ClusteredVolume(new InterleavedVolume(disk, 2, 0, 6, 0), n, 0); // if image starts at track 1
-                    return Auto.Check(new Volume[] { disk, d2, d3 });
+                    Int32 n = 512 / volume.BlockSize;
+                    Volume d2 = new ClusteredVolume(new InterleavedVolume(volume, 2, 0, 6, 26), n, 26); // if image includes track 0
+                    Volume d3 = new ClusteredVolume(new InterleavedVolume(volume, 2, 0, 6, 0), n, 0); // if image starts at track 1
+                    return Auto.Check(new Volume[] { volume, d2, d3 });
                 }
-                if ((disk.MaxCylinder < 80) && (disk.MinHead == disk.MaxHead) && (disk.MaxSector(disk.MinCylinder, disk.MinHead) == 10) && (disk.BlockSize == 512))
+                if ((volume.MaxCylinder < 80) && (volume.MinHead == volume.MaxHead) && (volume.MaxSector(volume.MinCylinder, volume.MinHead) == 10) && (volume.BlockSize == 512))
                 {
                     // DEC RX50 Floppy - 5.25" SSDD diskette, 80 tracks, 10 sectors
                     // 'Soft' sector interleave is 2:1, with a 2 sector track-to-track skew.
                     Debug(2, "RX50 image, also testing with interleave applied");
-                    Volume d2 = new InterleavedVolume(disk, 2, 0, 2, 0);
-                    return Auto.Check(new Volume[] { disk, d2 });
+                    Volume d2 = new InterleavedVolume(volume, 2, 0, 2, 0);
+                    return Auto.Check(new Volume[] { volume, d2 });
                 }
             }
             return Auto.Check(new Volume[] { image });

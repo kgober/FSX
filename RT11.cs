@@ -160,12 +160,12 @@ namespace FSX
                 E esw;
                 while (((esw = (E)seg.GetUInt16L(sp)) & E.EOS) == 0)
                 {
-                    w = seg.GetUInt16L(sp + 2);
-                    String fn1 = (w < 64000) ? Radix50.Convert(w) : "---";
-                    w = seg.GetUInt16L(sp + 4);
-                    String fn2 = (w < 64000) ? Radix50.Convert(w) : "---";
-                    w = seg.GetUInt16L(sp + 6);
-                    String ext = (w < 64000) ? Radix50.Convert(w) : "---";
+                    String fn1 = "---";
+                    Radix50.TryConvert(seg.GetUInt16L(sp + 2), ref fn1);
+                    String fn2 = "---";
+                    Radix50.TryConvert(seg.GetUInt16L(sp + 4), ref fn2);
+                    String ext = "---";
+                    Radix50.TryConvert(seg.GetUInt16L(sp + 6), ref ext);
                     Int32 len = seg.GetUInt16L(sp + 8);
                     String cdt = "           ";
                     w = seg.GetUInt16L(sp + 12);
@@ -232,12 +232,12 @@ namespace FSX
                     Char s3 = ((esw & E.PERM) == 0) ? '-' : 'F';
                     Char s4 = ((esw & E.TENT) == 0) ? '-' : 'T';
                     Char s5 = ((esw & E.MPTY) == 0) ? '-' : 'E';
-                    w = B.GetUInt16L(sp + 2);
-                    String fn1 = (w < 64000) ? Radix50.Convert(w) : "---";
-                    w = B.GetUInt16L(sp + 4);
-                    String fn2 = (w < 64000) ? Radix50.Convert(w) : "---";
-                    w = B.GetUInt16L(sp + 6);
-                    String ext = (w < 64000) ? Radix50.Convert(w) : "---";
+                    String fn1 = "---";
+                    Radix50.TryConvert(B.GetUInt16L(sp + 2), ref fn1);
+                    String fn2 = "---";
+                    Radix50.TryConvert(B.GetUInt16L(sp + 4), ref fn2);
+                    String ext = "---";
+                    Radix50.TryConvert(B.GetUInt16L(sp + 6), ref ext);
                     Int32 len = B.GetUInt16L(sp + 8);
                     Int32 chj = B.GetUInt16L(sp + 10);
                     String cdt = "           ";
@@ -437,12 +437,12 @@ namespace FSX
                     Int32 len = seg.GetUInt16L(sp + 8);
                     if ((esw & E.PERM) != 0)
                     {
-                        w = seg.GetUInt16L(sp + 2);
-                        String fn1 = (w < 64000) ? Radix50.Convert(w) : "---";
-                        w = seg.GetUInt16L(sp + 4);
-                        String fn2 = (w < 64000) ? Radix50.Convert(w) : "---";
-                        w = seg.GetUInt16L(sp + 6);
-                        String ext = (w < 64000) ? Radix50.Convert(w) : "---";
+                        String fn1 = "---";
+                        Radix50.TryConvert(seg.GetUInt16L(sp + 2), ref fn1);
+                        String fn2 = "---";
+                        Radix50.TryConvert(seg.GetUInt16L(sp + 4), ref fn2);
+                        String ext = "---";
+                        Radix50.TryConvert(seg.GetUInt16L(sp + 6), ref ext);
                         String fn = String.Concat(fn1, fn2, ".", ext);
                         if (RE.IsMatch(fn))
                         {

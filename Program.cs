@@ -1059,7 +1059,7 @@ namespace FSX
                         if ((i + j + 1 < data.Length) && (j + 1 < l))
                         {
                             UInt16 w = Program.ToUInt16L(data, i + j);
-                            if (w < 64000U) s = Radix50.Convert(w);
+                            Radix50.TryConvert(w, ref s);
                         }
                         output.Write(s);
                     }

@@ -1,5 +1,5 @@
 // DEC.cs
-// Copyright © 2019 Kenneth Gober
+// Copyright © 2019-2020 Kenneth Gober
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -46,6 +46,19 @@ namespace FSX
             buf.Append(T[v / 40]);
             buf.Append(T[v % 40]);
             return buf.ToString();
+        }
+
+        public static Boolean TryConvert(UInt16 value, ref String result)
+        {
+            Int32 v = value;
+            if (v >= 64000U) return false;
+            StringBuilder buf = new StringBuilder(3);
+            buf.Append(T[v / 1600]);
+            v = v % 1600;
+            buf.Append(T[v / 40]);
+            buf.Append(T[v % 40]);
+            result = buf.ToString();
+            return true;
         }
     }
 }

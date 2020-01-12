@@ -26,6 +26,7 @@
 // support .IMD file writing
 
 using System;
+using System.Text;
 
 namespace FSX
 {
@@ -91,8 +92,11 @@ namespace FSX
 
             // read image (use last track's largest sector as default volume sector size)
             if (ss == -1) for (Int32 i = 0; i < SS.Length; i++) if (SS[i] > ss) ss = SS[i];
-            CHSVolume image = new CHSVolume(source, ss, ++nc, ++nh);
-            for (p = 0; data[p++] != 0x1a; ) ; // skip ASCII header
+            for (p = 0; data[p] != 0x1a; p++) ; // count size of ASCII header
+            StringBuilder buf = new StringBuilder(p);
+            for (p = 0; data[p] != 0x1a; p++) buf.Append((Char)data[p]);
+            p++; // skip 0x1a header terminator
+            CHSVolume image = new CHSVolume(source, buf.ToString(), ss, ++nc, ++nh);
             while (p < data.Length)
             {
                 // track header

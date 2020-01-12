@@ -214,6 +214,11 @@ namespace FSX
                         Out.WriteLine(fmt, v.Key, v.FS.Type, v.FS.Source);
                     }
                 }
+                else if (cmd == "info")
+                {
+                    VDE v = ParseVol(ref arg);
+                    Out.WriteLine(v.FS.Volume.Info);
+                }
                 else if (cmd == "test")
                 {
                     // allow a volume to be tested without attempting to mount it
@@ -481,7 +486,7 @@ namespace FSX
                         {
                             if ((type == typeof(LBAVolume)) || (type == typeof(Volume)))
                             {
-                                Volume volume = new LBAVolume(s, data, size);
+                                Volume volume = new LBAVolume(s, s, data, size);
                                 return Auto.ConstructFS(t, volume);
                             }
                             else if (type == typeof(CHSVolume))
@@ -648,42 +653,42 @@ namespace FSX
             }
             if (data.Length == 252928) // 76 tracks of 26 128-byte sectors (DEC RX01)
             {
-                CHSVolume d = new CHSVolume(source, data, 128, 76, 1, 26);
+                CHSVolume d = new CHSVolume(source, source, data, 128, 76, 1, 26);
                 return LoadFS(source, d);
             }
             else if (data.Length == 256256) // 77 tracks of 26 128-byte sectors (IBM 3740)
             {
-                CHSVolume d = new CHSVolume(source, data, 128, 77, 1, 26);
+                CHSVolume d = new CHSVolume(source, source, data, 128, 77, 1, 26);
                 return LoadFS(source, d);
             }
             else if (data.Length == 266240) // 80 tracks of 26 128-byte sectors (raw 8" SSSD diskette)
             {
-                CHSVolume d = new CHSVolume(source, data, 128, 80, 1, 26);
+                CHSVolume d = new CHSVolume(source, source, data, 128, 80, 1, 26);
                 return LoadFS(source, d);
             }
             else if (data.Length == 295936) // 578 512-byte blocks (DEC TU56 DECTape standard format)
             {
-                LBAVolume d = new LBAVolume(source, data, 512);
+                LBAVolume d = new LBAVolume(source, source, data, 512);
                 return LoadFS(source, d);
             }
             else if (data.Length == 409600) // 80 tracks of 10 512-byte sectors (DEC RX50)
             {
-                CHSVolume d = new CHSVolume(source, data, 512, 80, 1, 10);
+                CHSVolume d = new CHSVolume(source, source, data, 512, 80, 1, 10);
                 return LoadFS(source, d);
             }
             else if (data.Length == 505856) // 76 tracks of 26 256-byte sectors (DEC RX02)
             {
-                CHSVolume d = new CHSVolume(source, data, 256, 76, 1, 26);
+                CHSVolume d = new CHSVolume(source, source, data, 256, 76, 1, 26);
                 return LoadFS(source, d);
             }
             else if (data.Length == 512512) // 77 tracks of 26 256-byte sectors
             {
-                CHSVolume d = new CHSVolume(source, data, 256, 77, 1, 26);
+                CHSVolume d = new CHSVolume(source, source, data, 256, 77, 1, 26);
                 return LoadFS(source, d);
             }
             else if (data.Length == 532480) // 80 tracks of 26 256-byte sectors (raw 8" SSDD diskette)
             {
-                CHSVolume d = new CHSVolume(source, data, 256, 80, 1, 26);
+                CHSVolume d = new CHSVolume(source, source, data, 256, 80, 1, 26);
                 return LoadFS(source, d);
             }
             else if (data.Length == 533248) // 77 tracks, 2083 blocks (Commodore 8050)
@@ -718,37 +723,37 @@ namespace FSX
             // and therefore require special error-free disk cartridges.
             else if (data.Length == 1228800) // 4800 256-byte sectors (DEC RK02, 3 spare tracks)
             {
-                CHSVolume d = new CHSVolume(source, data, 256, 200, 2, 12);
+                CHSVolume d = new CHSVolume(source, source, data, 256, 200, 2, 12);
                 return LoadFS(source, d);
             }
             else if (data.Length == 1247232) // 4872 256-byte sectors (DEC RK02, all tracks used)
             {
-                CHSVolume d = new CHSVolume(source, data, 256, 203, 2, 12);
+                CHSVolume d = new CHSVolume(source, source, data, 256, 203, 2, 12);
                 return LoadFS(source, d);
             }
             else if (data.Length == 2457600) // 4800 512-byte sectors (DEC RK03, 3 spare tracks)
             {
-                CHSVolume d = new CHSVolume(source, data, 512, 200, 2, 12);
+                CHSVolume d = new CHSVolume(source, source, data, 512, 200, 2, 12);
                 return LoadFS(source, d);
             }
             else if (data.Length == 2494464) // 4872 512-byte sectors (DEC RK03, all tracks used)
             {
-                CHSVolume d = new CHSVolume(source, data, 512, 203, 2, 12);
+                CHSVolume d = new CHSVolume(source, source, data, 512, 203, 2, 12);
                 return LoadFS(source, d);
             }
             else if ((data.Length % 513 == 0) && (data.Length % 512 == 0))
             {
                 // these might be 512-byte blocks with 1 added error/status byte
-                LBAVolume d1 = new LBAVolume(source, data, 512);
+                LBAVolume d1 = new LBAVolume(source, source, data, 512);
                 Int32 n = data.Length / 513;
-                LBAVolume d2 = new LBAVolume(source, 512, n);
+                LBAVolume d2 = new LBAVolume(source, source, 512, n);
                 for (Int32 i = 0; i < n; i++) d2[i].CopyFrom(data, i * 513, 0, 512);
                 return Auto.Check(new Volume[] { d1, d2 });
             }
             else if (data.Length % 513 == 0) // assume 512-byte blocks with error/status bytes
             {
                 Int32 n = data.Length / 513;
-                LBAVolume d = new LBAVolume(source, 512, n);
+                LBAVolume d = new LBAVolume(source, source, 512, n);
                 Int32 p = 0;
                 for (Int32 i = 0; i < n; i++)
                 {
@@ -761,7 +766,7 @@ namespace FSX
             }
             else if (data.Length % 512 == 0) // some number of 512-byte blocks
             {
-                LBAVolume d = new LBAVolume(source, data, 512);
+                LBAVolume d = new LBAVolume(source, source, data, 512);
                 return LoadFS(source, d);
             }
 
@@ -821,6 +826,7 @@ namespace FSX
             Out.WriteLine("  save|write id pathname - export image of volume 'id:' to file 'pathname'");
             Out.WriteLine("  unload|unmount|umount id - unmount volume 'id:'");
             Out.WriteLine("  vols|volumes - show mounted volumes");
+            Out.WriteLine("  info [id:] - show volume information");
             Out.WriteLine("  dirs - show current working directory for each mounted volume");
             Out.WriteLine("  pwd - show current working directory on current volume");
             Out.WriteLine("  id: - change current volume to 'id:'");

@@ -21,7 +21,6 @@
 
 
 // Future Improvements / To Do
-// add Volume.Info to store more detail (e.g. .IMD image descriptions)
 // implement Block.GetInt32, GetUInt32 (incl. pdp-endian versions)
 // provide a way to pad an image with leading zeros
 // support volume partitioning (more efficiently than ClusteredVolume)
@@ -58,6 +57,7 @@ namespace FSX
     {
         public abstract Volume Base { get; }
         public abstract String Source { get; }
+        public abstract String Info { get; }
         public abstract Int32 BlockSize { get; }
         public abstract Int32 BlockCount { get; }
         public abstract Int32 MinCylinder { get; }
@@ -531,19 +531,21 @@ namespace FSX
     class LBAVolume : Volume
     {
         private String mSource;
+        private String mInfo;
         private Int32 mBlockSize;
         private Int32 mBlockCount;
         private Record[] mData;
 
-        public LBAVolume(String source, Int32 blockSize, Int32 blockCount)
+        public LBAVolume(String source, String info, Int32 blockSize, Int32 blockCount)
         {
             mSource = source;
+            mInfo = info;
             mBlockSize = blockSize;
             mBlockCount = blockCount;
             mData = new Record[blockCount];
         }
 
-        public LBAVolume(String source, Byte[] data, Int32 blockSize) : this(source, blockSize, data.Length / blockSize)
+        public LBAVolume(String source, String info, Byte[] data, Int32 blockSize) : this(source, info, blockSize, data.Length / blockSize)
         {
             for (Int32 i = 0, p = 0; i < mBlockCount; i++, p += blockSize) mData[i] = new Record(blockSize, data, p);
         }
@@ -556,6 +558,11 @@ namespace FSX
         public override String Source
         {
             get { return mSource; }
+        }
+
+        public override string Info
+        {
+            get { return mInfo; }
         }
 
         public override Int32 BlockSize
@@ -624,6 +631,7 @@ namespace FSX
     class CHSVolume : Volume
     {
         private String mSource;
+        private String mInfo;
         private Int32 mBlockSize;
         private Int32 mBlockCount;
         private Int32 mCyls;
@@ -633,9 +641,10 @@ namespace FSX
         private Int32 mMinSect;
         private Track[,] mData;
 
-        public CHSVolume(String source, Int32 sectorSize, Int32 minCylinder, Int32 numCylinders, Int32 minHead, Int32 numHeads, Int32 minSector)
+        public CHSVolume(String source, String info, Int32 sectorSize, Int32 minCylinder, Int32 numCylinders, Int32 minHead, Int32 numHeads, Int32 minSector)
         {
             mSource = source;
+            mInfo = info;
             mBlockSize = sectorSize;
             mBlockCount = -1;
             mCyls = numCylinders;
@@ -646,13 +655,13 @@ namespace FSX
             mData = new Track[numCylinders, numHeads];
         }
 
-        public CHSVolume(String source, Int32 sectorSize, Int32 numCylinders, Int32 numHeads)
-            : this(source, sectorSize, 0, numCylinders, 0, numHeads, 1)
+        public CHSVolume(String source, String info, Int32 sectorSize, Int32 numCylinders, Int32 numHeads)
+            : this(source, info, sectorSize, 0, numCylinders, 0, numHeads, 1)
         {
         }
 
-        public CHSVolume(String source, Byte[] data, Int32 sectorSize, Int32 minCylinder, Int32 numCylinders, Int32 minHead, Int32 numHeads, Int32 minSector, Int32 numSectors)
-            : this(source, sectorSize, minCylinder, numCylinders, minHead, numHeads, minSector)
+        public CHSVolume(String source, String info, Byte[] data, Int32 sectorSize, Int32 minCylinder, Int32 numCylinders, Int32 minHead, Int32 numHeads, Int32 minSector, Int32 numSectors)
+            : this(source, info, sectorSize, minCylinder, numCylinders, minHead, numHeads, minSector)
         {
             Int32 p = 0;
             for (Int32 c = 0; c < numCylinders; c++)
@@ -670,8 +679,8 @@ namespace FSX
             }
         }
 
-        public CHSVolume(String source, Byte[] data, Int32 sectorSize, Int32 numCylinders, Int32 numHeads, Int32 numSectors)
-            : this(source, data, sectorSize, 0, numCylinders, 0, numHeads, 1, numSectors)
+        public CHSVolume(String source, String info, Byte[] data, Int32 sectorSize, Int32 numCylinders, Int32 numHeads, Int32 numSectors)
+            : this(source, info, data, sectorSize, 0, numCylinders, 0, numHeads, 1, numSectors)
         {
         }
 
@@ -683,6 +692,11 @@ namespace FSX
         public override String Source
         {
             get { return mSource; }
+        }
+
+        public override string Info
+        {
+            get { return mInfo; }
         }
 
         public override Int32 BlockSize
@@ -798,6 +812,7 @@ namespace FSX
     {
         private CHSVolume mVol;
         private String mSource;
+        private String mInfo;
         private Int32 mInterleave;
         private Int32 mHeadSkew;
         private Int32 mCylSkew;
@@ -812,6 +827,7 @@ namespace FSX
             if (interleave == 0) interleave = 1;
             mVol = volume;
             mSource = String.Format("{0} [I={1:D0},{2:D0},{3:D0}@{4:D0}]", volume.Source, interleave, headSkew, cylSkew, start);
+            mInfo = String.Format("{0}\nInterleave={1:D0},HeadSkew={2:D0},CylSkew={3:D0},Start={4:D0}", volume.Info, interleave, headSkew, cylSkew, start);
             mInterleave = interleave;
             mHeadSkew = headSkew;
             mCylSkew = cylSkew;
@@ -829,6 +845,11 @@ namespace FSX
         public override String Source
         {
             get { return mSource; }
+        }
+
+        public override string Info
+        {
+            get { return mInfo; }
         }
 
         public override Int32 BlockSize
@@ -917,6 +938,7 @@ namespace FSX
     {
         private Volume mVol;
         private String mSource;
+        private String mInfo;
         private Int32 mBPC;
         private Int32 mStart;
         private Int32 mBlockSize;
@@ -932,6 +954,7 @@ namespace FSX
             mBlockCount = (volume.BlockCount - startBlock) / blocksPerCluster;
             if (clusterCount < mBlockCount) mBlockCount = clusterCount;
             mSource = String.Format("{0} [C={1:D0}x{2:D0}@{3:D0}]", volume.Source, blocksPerCluster, mBlockCount, startBlock);
+            mInfo = String.Format("{0}\nClusters={1:D0},ClusterSize={2:D0},Start={3:D0}", volume.Info, mBlockCount, blocksPerCluster * volume.BlockSize, startBlock);
             mCache = new Cluster[mBlockCount];
         }
 
@@ -947,6 +970,11 @@ namespace FSX
         public override String Source
         {
             get { return mSource; }
+        }
+
+        public override string Info
+        {
+            get { return mInfo; }
         }
 
         public override Int32 BlockSize
@@ -1024,6 +1052,7 @@ namespace FSX
     {
         private Volume mVol;
         private String mSource;
+        private String mInfo;
         private Int32 mBlockCount;
         private Block[] mCache;
         
@@ -1032,6 +1061,7 @@ namespace FSX
             mVol = volume;
             Int32 padBytes = padBlocks * volume.BlockSize;
             mSource = String.Format("{0} [{1}{2}]", volume.Source, (padBytes >= 0) ? "+" : null, Program.FormatNum(padBytes));
+            mInfo = String.Format("{0}\nPadding={1}{2}", volume.Info, (padBytes >= 0) ? "+" : null, Program.FormatNum(padBytes));
             mBlockCount = volume.BlockCount + padBlocks;
             if (padBlocks > 0) mCache = new Block[padBlocks];
         }
@@ -1044,6 +1074,11 @@ namespace FSX
         public override String Source
         {
             get { return mSource; }
+        }
+
+        public override string Info
+        {
+            get { return mInfo; }
         }
 
         public override Int32 BlockSize

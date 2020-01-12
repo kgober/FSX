@@ -212,7 +212,7 @@ namespace FSX
             else if ((data.Length == 205312) || (data.Length == 206114)) c = 42;
             if (c != -1)
             {
-                d = new CHSVolume(source, 256, 1, c, 0, 1, 0);
+                d = new CHSVolume(source, source, 256, 1, c, 0, 1, 0);
                 for (Int32 t = 1; t <= 17; t++) d[t, 0] = new Track(z1);
                 for (Int32 t = 18; t <= 24; t++) d[t, 0] = new Track(z2);
                 for (Int32 t = 25; t <= 30; t++) d[t, 0] = new Track(z3);
@@ -248,7 +248,7 @@ namespace FSX
             if (data.Length == 533248) c = 77;
             if (c != -1)
             {
-                d = new CHSVolume(source, 256, 1, c, 0, 1, 0);
+                d = new CHSVolume(source, source, 256, 1, c, 0, 1, 0);
                 for (Int32 t = 1; t <= 39; t++) d[t, 0] = new Track(29);
                 for (Int32 t = 40; t <= 53; t++) d[t, 0] = new Track(27);
                 for (Int32 t = 54; t <= 64; t++) d[t, 0] = new Track(25);
@@ -284,7 +284,7 @@ namespace FSX
             if (data.Length == 1066496) c = 154; // physically 77 with 2 sides
             if (c != -1)
             {
-                d = new CHSVolume(source, 256, 1, c, 0, 1, 0);
+                d = new CHSVolume(source, source, 256, 1, c, 0, 1, 0);
                 for (Int32 t = 1; t <= 39; t++) d[t, 0] = new Track(29);
                 for (Int32 t = 40; t <= 53; t++) d[t, 0] = new Track(27);
                 for (Int32 t = 54; t <= 64; t++) d[t, 0] = new Track(25);

@@ -488,7 +488,7 @@ namespace FSX
             size = 512;
             type = typeof(Volume);
             if (volume == null) return false;
-            if (volume.BlockSize != size) return Program.Debug(false, 1, "RT11.Test: invalid block size (is {0:D0}, require {1:D0})", volume.BlockSize, size);
+            if (volume.BlockSize != size) return Debug.WriteLine(false, 1, "RT11.Test: invalid block size (is {0:D0}, require {1:D0})", volume.BlockSize, size);
             if (level == 0) return true;
 
             // level 1 - check boot block (return volume size and type)
@@ -496,19 +496,19 @@ namespace FSX
             {
                 size = -1;
                 type = typeof(Volume);
-                if (volume.BlockCount < 1) return Program.Debug(false, 1, "RT11.Test: volume too small to contain boot block");
+                if (volume.BlockCount < 1) return Debug.WriteLine(false, 1, "RT11.Test: volume too small to contain boot block");
                 return true;
             }
 
             // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
             size = -1;
             type = null;
-            if (volume.BlockCount < 2) return Program.Debug(false, 1, "RT11.Test: volume too small to contain home block");
+            if (volume.BlockCount < 2) return Debug.WriteLine(false, 1, "RT11.Test: volume too small to contain home block");
             type = typeof(RT11);
             if (level == 2) return true;
 
             // level 3 - check directory structure (return volume size and type)
-            if (volume.BlockCount < 8) return Program.Debug(false, 1, "RT11.Test: volume too small to contain directory segment {0:D0}", 1);
+            if (volume.BlockCount < 8) return Debug.WriteLine(false, 1, "RT11.Test: volume too small to contain directory segment {0:D0}", 1);
             ClusteredVolume Dir = new ClusteredVolume(volume, 2, 4, 32); // start at 4 so that segment 1 falls on block 6
             // check for problems with segment chain structure and count segments in use
             Int32[] SS = new Int32[32]; // segments seen (to detect cycles)
@@ -516,11 +516,11 @@ namespace FSX
             Int32 s = 1;
             while (s != 0)
             {
-                if (SS[s] != 0) return Program.Debug(false, 1, "RT11.Test: invalid directory segment chain: segment {0:D0} repeated", s);
+                if (SS[s] != 0) return Debug.WriteLine(false, 1, "RT11.Test: invalid directory segment chain: segment {0:D0} repeated", s);
                 SS[s] = ++sc;
                 s = Dir[s].GetUInt16L(2); // next directory segment
-                if (s > 31) return Program.Debug(false, 1, "RT11.Test: invalid directory segment chain: segment {0:D0} invalid", s);
-                if (s >= Dir.BlockCount) return Program.Debug(false, 1, "RT11.Test: volume too small to contain directory segment {0:D0}", s);
+                if (s > 31) return Debug.WriteLine(false, 1, "RT11.Test: invalid directory segment chain: segment {0:D0} invalid", s);
+                if (s >= Dir.BlockCount) return Debug.WriteLine(false, 1, "RT11.Test: volume too small to contain directory segment {0:D0}", s);
             }
             // check directory segment consistency (and calculate volume size)
             Int32 ns = -1; // total directory segments
@@ -532,21 +532,21 @@ namespace FSX
                 Block D = Dir[s];
                 Int32 n = D.GetUInt16L(0); // total directory segments
                 if ((ns == -1) && (n >= sc) && (n < 32)) ns = n;
-                else if ((s == 1) || ((s != 1) && (n != ns) && (n != 0))) return Program.Debug(false, 1, "RT11.Test: inconsistent directory segment count in segment {0:D0} (is {1:D0}, expect {2:D0}{3})", s, n, sc, (sc == 31) ? null : " <= n <= 31");
+                else if ((s == 1) || ((s != 1) && (n != ns) && (n != 0))) return Debug.WriteLine(false, 1, "RT11.Test: inconsistent directory segment count in segment {0:D0} (is {1:D0}, expect {2:D0}{3})", s, n, sc, (sc == 31) ? null : " <= n <= 31");
                 n = D.GetUInt16L(4); // highest segment in use
-                if ((s == 1) && (n != sc)) return Program.Debug(false, 1, "RT11.Test: inconsistent highest-segment-used pointer in segment {0:D0} (is {1:D0}, expect {2:D0})", s, n, sc);
+                if ((s == 1) && (n != sc)) return Debug.WriteLine(false, 1, "RT11.Test: inconsistent highest-segment-used pointer in segment {0:D0} (is {1:D0}, expect {2:D0})", s, n, sc);
                 n = D.GetUInt16L(6); // extra bytes per directory entry
                 if ((eb == -1) && ((n % 2) == 0)) eb = n;
-                else if (n != eb) return Program.Debug(false, 1, "RT11.Test: inconsistent or invalid extra bytes value in segment {0:D0} (is {1:D0}, require {2})", s, n, (eb == -1) ? "even number" : eb.ToString("D0"));
+                else if (n != eb) return Debug.WriteLine(false, 1, "RT11.Test: inconsistent or invalid extra bytes value in segment {0:D0} (is {1:D0}, require {2})", s, n, (eb == -1) ? "even number" : eb.ToString("D0"));
                 Int32 bp = D.GetUInt16L(8); // starting data block for this segment
-                if (bp < 6 + ns * 2) return Program.Debug(false, 1, "RT11.Test: invalid start-of-data pointer in segment {0:D0} (is {1:D0}, require n >= {2:D0})", s, bp, 6 + ns * 2);
+                if (bp < 6 + ns * 2) return Debug.WriteLine(false, 1, "RT11.Test: invalid start-of-data pointer in segment {0:D0} (is {1:D0}, require n >= {2:D0})", s, bp, 6 + ns * 2);
                 Int32 sp = 10;
                 E esw;
                 while (((esw = (E)D.GetUInt16L(sp)) & E.EOS) == 0) // entry status word
                 {
                     n = D.GetUInt16L(sp + 8); // file length (in blocks)
                     bp += n;
-                    if (sp + 14 + eb > 1022) return Program.Debug(false, 1, "RT11.Test: missing end-of-segment marker in segment {0:D0}", s);
+                    if (sp + 14 + eb > 1022) return Debug.WriteLine(false, 1, "RT11.Test: missing end-of-segment marker in segment {0:D0}", s);
                     sp += 14 + eb;
                 }
                 if (bp > md) md = bp;
@@ -567,26 +567,26 @@ namespace FSX
                     UInt16 w = D.GetUInt16L(sp + 14 + eb);
                     Boolean lastfile = (((E)w & E.EOS) == E.EOS) && (D.GetUInt16L(2) == 0);
                     w = D.GetUInt16L(sp + 2); // Radix-50 file name (chars 1-3)
-                    if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY)) return Program.Debug(false, 1, "RT11.Test: invalid file name in segment {0:D0}", s);
+                    if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY)) return Debug.WriteLine(false, 1, "RT11.Test: invalid file name in segment {0:D0}", s);
                     String fn1 = Radix50.Convert(w);
                     w = D.GetUInt16L(sp + 4); // Radix-50 file name (chars 4-6)
-                    if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY)) return Program.Debug(false, 1, "RT11.Test: invalid file name in segment {0:D0}", s);
+                    if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY)) return Debug.WriteLine(false, 1, "RT11.Test: invalid file name in segment {0:D0}", s);
                     String fn2 = Radix50.Convert(w);
                     w = D.GetUInt16L(sp + 6); // Radix-50 file type
-                    if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY)) return Program.Debug(false, 1, "RT11.Test: invalid file name in segment {0:D0}", s);
+                    if ((w >= 64000) && !(lastfile && (esw & E.MPTY) == E.MPTY)) return Debug.WriteLine(false, 1, "RT11.Test: invalid file name in segment {0:D0}", s);
                     String ext = Radix50.Convert(w);
                     String fn = String.Concat(fn1, fn2).TrimEnd(' ');
                     fn = String.Concat(fn, ".", ext.TrimEnd(' '));
                     E e = esw & (E.TENT | E.MPTY | E.PERM);
-                    if ((e != E.TENT) && (e != E.MPTY) && (e != E.PERM)) return Program.Debug(false, 1, "RT11.Test: invalid file type in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
-                    if (((esw & (E.PROT | E.READ)) != 0) && (e != E.PERM)) return Program.Debug(false, 1, "RT11.Test: Protected/ReadOnly flags not valid for non-permanent file in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
+                    if ((e != E.TENT) && (e != E.MPTY) && (e != E.PERM)) return Debug.WriteLine(false, 1, "RT11.Test: invalid file type in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
+                    if (((esw & (E.PROT | E.READ)) != 0) && (e != E.PERM)) return Debug.WriteLine(false, 1, "RT11.Test: Protected/ReadOnly flags not valid for non-permanent file in segment {0:D0}, file {1}: 0x{2:x4}", s, fn, esw);
                     w = D.GetUInt16L(sp + 12); // creation date
                     if ((w != 0) && !(lastfile && (esw & E.MPTY) == E.MPTY))
                     {
                         Int32 y = ((w & 0xc000) >> 9) + (w & 0x001f) + 1972;
                         Int32 m = (w & 0x3c00) >> 10;
                         Int32 d = (w & 0x03e0) >> 5;
-                        if ((m < 1) || (m > 12) || (d < 1) || (d > 31) || (y < 1973)) return Program.Debug(false, 1, "RT11.Test: invalid file creation date in segment {0:D0}, file {1}: {2:D4}-{3:D2}-{4:D2}", s, fn, y, m, d);
+                        if ((m < 1) || (m > 12) || (d < 1) || (d > 31) || (y < 1973)) return Debug.WriteLine(false, 1, "RT11.Test: invalid file creation date in segment {0:D0}, file {1}: {2:D4}-{3:D2}-{4:D2}", s, fn, y, m, d);
                     }
                     sp += 14 + eb;
                 }
@@ -616,8 +616,8 @@ namespace FSX
                     Int32 n = D.GetUInt16L(sp + 8); // file length (in blocks)
                     for (Int32 i = 0; i < n; i++)
                     {
-                        if ((bp + i == volume.BlockCount) & ((esw & E.MPTY) == 0)) Program.Debug(1, "RT11.Test: WARNING: blocks {0:D0} and higher of file \"{1}\" fall outside image block range (is {2:D0}, expect n < {3:D0})", bp + i, fn, volume.BlockCount);
-                        if (BMap[bp + i]) return Program.Debug(false, 1, "RT11.Test: block {0:D0} of file \"{1}\" is also allocated to another file", bp + i, fn);
+                        if ((bp + i == volume.BlockCount) & ((esw & E.MPTY) == 0)) Debug.WriteLine(1, "RT11.Test: WARNING: blocks {0:D0} and higher of file \"{1}\" fall outside image block range (is {2:D0}, expect n < {3:D0})", bp + i, fn, volume.BlockCount);
+                        if (BMap[bp + i]) return Debug.WriteLine(false, 1, "RT11.Test: block {0:D0} of file \"{1}\" is also allocated to another file", bp + i, fn);
                         BMap[bp + i] = true;
                     }
                     bp += n;
@@ -628,7 +628,7 @@ namespace FSX
             // unmarked blocks are lost
             for (Int32 i = 0; i < size; i++)
             {
-                if (!BMap[i]) return Program.Debug(false, 1, "RT11.Test: block {0:D0} is not allocated and not reserved", i);
+                if (!BMap[i]) return Debug.WriteLine(false, 1, "RT11.Test: block {0:D0} is not allocated and not reserved", i);
             }
             if (level == 6) return true;
 
@@ -643,7 +643,7 @@ namespace FSX
             Int32 sum = 0;
             for (Int32 p = 0; p < checksumOffset; p += 2) sum += block.GetUInt16L(p);
             Int32 n = block.GetUInt16L(checksumOffset);
-            Program.Debug(2, "Block checksum @{0:D0} {1}: {2:x4} {3}= {4:x4}", checksumOffset, ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
+            Debug.WriteLine(2, "Block checksum @{0:D0} {1}: {2:x4} {3}= {4:x4}", checksumOffset, ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
             return ((sum != 0) && ((sum % 65536) == n));
         }
 
@@ -673,7 +673,7 @@ namespace FSX
             np = np.Replace("%", "[^ ]").Replace("*", @".*");
             ep = ep.Replace("%", "[^ ]").Replace("*", @".*");
             p = String.Concat("^", np, @" *\.", ep, " *$");
-            Program.Debug(2, "Regex: {0} => {1}", pattern, p);
+            Debug.WriteLine(2, "Regex: {0} => {1}", pattern, p);
             return new Regex(p);
         }
     }

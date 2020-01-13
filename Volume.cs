@@ -113,96 +113,82 @@ namespace FSX
 
         public override Int32 CopyTo(Byte[] targetBuffer, Int32 targetOffset)
         {
-            return CopyTo(targetBuffer, targetOffset, 0, mData.Length);
+            return Buffer.Copy(mData, 0, targetBuffer, targetOffset, mData.Length);
         }
 
         public override Int32 CopyTo(Byte[] targetBuffer, Int32 targetOffset, Int32 blockOffset, Int32 count)
         {
-            Int32 n = targetBuffer.Length - targetOffset;
-            if (n < count) count = n;
-            n = mData.Length - blockOffset;
-            if (n < count) count = n;
-            for (Int32 i = 0; i < count; i++) targetBuffer[targetOffset++] = mData[blockOffset++];
-            return count;
+            return Buffer.Copy(mData, blockOffset, targetBuffer, targetOffset, count);
         }
 
         public override Int32 CopyFrom(Byte[] sourceBuffer, Int32 sourceOffset, Int32 blockOffset, Int32 count)
         {
             Int32 n = sourceBuffer.Length - sourceOffset;
-            if (n < count) count = n;
+            if (count > n) count = n;
             n = mData.Length - blockOffset;
-            if (n < count) count = n;
-            for (Int32 i = 0; i < count; i++)
+            if (count > n) count = n;
+            if (!mDirty)
             {
-                mDirty |= (mData[blockOffset] != sourceBuffer[sourceOffset]);
-                mData[blockOffset++] = sourceBuffer[sourceOffset++];
+                for (Int32 i = 0; i < count; i++)
+                {
+                    if (mData[blockOffset + i] != sourceBuffer[sourceOffset + i])
+                    {
+                        mDirty = true;
+                        break;
+                    }
+                }
             }
-            return count;
+            return Buffer.Copy(sourceBuffer, sourceOffset, mData, blockOffset, count);
         }
 
         public override Byte GetByte(Int32 offset)
         {
-            return mData[offset];
+            return Buffer.GetByte(mData, offset);
         }
 
         public override Byte GetByte(ref Int32 offset)
         {
-            return mData[offset++];
+            return Buffer.GetByte(mData, ref offset);
         }
 
         public override Int16 GetInt16B(Int32 offset)
         {
-            return (BitConverter.IsLittleEndian) ? BitConverter.ToInt16(Reverse(offset, 2), 0) : BitConverter.ToInt16(mData, offset);
+            return Buffer.GetInt16B(mData, offset);
         }
 
         public override Int16 GetInt16B(ref Int32 offset)
         {
-            Int16 n = (BitConverter.IsLittleEndian) ? BitConverter.ToInt16(Reverse(offset, 2), 0) : BitConverter.ToInt16(mData, offset);
-            offset += 2;
-            return n;
+            return Buffer.GetInt16B(mData, ref offset);
         }
 
         public override Int16 GetInt16L(Int32 offset)
         {
-            return (BitConverter.IsLittleEndian) ? BitConverter.ToInt16(mData, offset) : BitConverter.ToInt16(Reverse(offset, 2), 0);
+            return Buffer.GetInt16L(mData, offset);
         }
 
         public override Int16 GetInt16L(ref Int32 offset)
         {
-            Int16 n = (BitConverter.IsLittleEndian) ? BitConverter.ToInt16(mData, offset) : BitConverter.ToInt16(Reverse(offset, 2), 0);
-            offset += 2;
-            return n;
+            return Buffer.GetInt16L(mData, ref offset);
         }
 
         public override UInt16 GetUInt16B(Int32 offset)
         {
-            return (BitConverter.IsLittleEndian) ? BitConverter.ToUInt16(Reverse(offset, 2), 0) : BitConverter.ToUInt16(mData, offset);
+            return Buffer.GetUInt16B(mData, offset);
         }
 
         public override UInt16 GetUInt16B(ref Int32 offset)
         {
-            UInt16 n = (BitConverter.IsLittleEndian) ? BitConverter.ToUInt16(Reverse(offset, 2), 0) : BitConverter.ToUInt16(mData, offset);
-            offset += 2;
-            return n;
+            return Buffer.GetUInt16B(mData, ref offset);
         }
 
         public override UInt16 GetUInt16L(Int32 offset)
         {
-            return (BitConverter.IsLittleEndian) ? BitConverter.ToUInt16(mData, offset) : BitConverter.ToUInt16(Reverse(offset, 2), 0);
+            return Buffer.GetUInt16L(mData, offset);
         }
 
         public override UInt16 GetUInt16L(ref Int32 offset)
         {
-            UInt16 n = (BitConverter.IsLittleEndian) ? BitConverter.ToUInt16(mData, offset) : BitConverter.ToUInt16(Reverse(offset, 2), 0);
-            offset += 2;
-            return n;
-        }
-
-        private Byte[] Reverse(Int32 offset, Int32 count)
-        {
-            Byte[] buf = new Byte[count];
-            for (Int32 i = count; i > 0; ) buf[--i] = mData[offset++];
-            return buf;
+            return Buffer.GetUInt16L(mData, ref offset);
         }
     }
 
@@ -296,7 +282,7 @@ namespace FSX
             while ((count > 0) && (i < mData.Length))
             {
                 Int32 n = mBlockSize - blockOffset; // number of bytes available to copy in block
-                if (count < n) n = count;
+                if (n > count) n = count;
                 ct += mData[i++].CopyTo(targetBuffer, targetOffset, blockOffset, n);
                 targetOffset += n;
                 blockOffset = 0;
@@ -313,7 +299,7 @@ namespace FSX
             while ((count > 0) && (i < mData.Length))
             {
                 Int32 n = mBlockSize - blockOffset; // number of bytes available to copy in block
-                if (count < n) n = count;
+                if (n > count) n = count;
                 ct += mData[i].CopyFrom(sourceBuffer, sourceOffset, blockOffset, n);
                 mDirty |= mData[i++].IsDirty;
                 sourceOffset += n;

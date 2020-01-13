@@ -197,7 +197,7 @@ namespace FSX
             Byte[] data = ReadFile(mVol, dirNode);
             for (Int32 bp = 0; bp < data.Length; bp += 16)
             {
-                Int32 iNum = Program.ToUInt16L(data, bp);
+                Int32 iNum = Buffer.GetUInt16L(data, bp);
                 if (iNum == 0) continue;
                 for (p = 2; p < 16; p++) if (data[bp + p] == 0) break;
                 name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
@@ -210,7 +210,7 @@ namespace FSX
             output.WriteLine("total {0:D0}", n);
             for (Int32 bp = 0; bp < data.Length; bp += 16)
             {
-                Int32 iNum = Program.ToUInt16L(data, bp);
+                Int32 iNum = Buffer.GetUInt16L(data, bp);
                 if (iNum == 0) continue;
                 for (p = 2; p < 16; p++) if (data[bp + p] == 0) break;
                 name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
@@ -335,7 +335,7 @@ namespace FSX
             Byte[] data = ReadFile(mVol, dirNode);
             for (Int32 bp = 0; bp < data.Length; bp += 16)
             {
-                Int32 iNum = Program.ToUInt16L(data, bp);
+                Int32 iNum = Buffer.GetUInt16L(data, bp);
                 if (iNum == 0) continue;
                 for (p = 2; p < 16; p++) if (data[bp + p] == 0) break;
                 String name = Encoding.ASCII.GetString(data, bp + 2, p - 2);
@@ -382,7 +382,7 @@ namespace FSX
             size = 512;
             type = typeof(Volume);
             if (volume == null) return false;
-            if (volume.BlockSize != size) return Program.Debug(false, 1, "Unix.Test: invalid block size (is {0:D0}, require {1:D0})", volume.BlockSize, size);
+            if (volume.BlockSize != size) return Debug.WriteLine(false, 1, "Unix.Test: invalid block size (is {0:D0}, require {1:D0})", volume.BlockSize, size);
             if (level == 0) return true;
 
             // level 1 - check boot block (return volume size and type)
@@ -391,31 +391,31 @@ namespace FSX
                 // Unix V5 doesn't support disk labels
                 size = -1;
                 type = typeof(Volume);
-                if (volume.BlockCount < 1) return Program.Debug(false, 1, "Unix.Test: volume too small to contain boot block");
+                if (volume.BlockCount < 1) return Debug.WriteLine(false, 1, "Unix.Test: volume too small to contain boot block");
                 return true;
             }
 
             // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
             size = -1;
             type = null;
-            if (volume.BlockCount < 2) return Program.Debug(false, 1, "Unix.Test: volume too small to contain super-block");
+            if (volume.BlockCount < 2) return Debug.WriteLine(false, 1, "Unix.Test: volume too small to contain super-block");
             Block SB = volume[1]; // super-block
             Int32 isize = SB.GetUInt16L(0); // number of blocks used for inodes
             Int32 n = SB.GetUInt16L(2); // file system size (in blocks)
-            if (isize + 2 > n) return Program.Debug(false, 1, "Unix.Test: super-block i-list exceeds volume size ({0:D0} > {1:D0})", isize + 2, n);
+            if (isize + 2 > n) return Debug.WriteLine(false, 1, "Unix.Test: super-block i-list exceeds volume size ({0:D0} > {1:D0})", isize + 2, n);
             Int32 p = SB.GetInt16L(4);  // number of blocks in super-block free block list
-            if ((p < 1) || (p > 100)) return Program.Debug(false, 1, "Unix.Test: super-block free block count invalid (is {0:D0}, require 1 <= n <= 100)", p);
+            if ((p < 1) || (p > 100)) return Debug.WriteLine(false, 1, "Unix.Test: super-block free block count invalid (is {0:D0}, require 1 <= n <= 100)", p);
             Int32 l = 2 * p;
             for (Int32 i = 0; i < l; i += 2)
             {
-                if (((p = SB.GetUInt16L(6 + i)) < isize + 2) || (p >= n)) return Program.Debug(false, 1, "Unix.Test: super-block free block {0:D0} invalid (is {1:D0}, require {2:D0} <= n < {3:D0})", i / 2, p, isize + 2, n);
+                if (((p = SB.GetUInt16L(6 + i)) < isize + 2) || (p >= n)) return Debug.WriteLine(false, 1, "Unix.Test: super-block free block {0:D0} invalid (is {1:D0}, require {2:D0} <= n < {3:D0})", i / 2, p, isize + 2, n);
             }
             p = SB.GetUInt16L(206); // number of inodes in super-block free inode list
-            if (p > 100) return Program.Debug(false, 1, "Unix.Test: super-block free i-node count invalid (is {0:D0}, require n <= 100)", p);
+            if (p > 100) return Debug.WriteLine(false, 1, "Unix.Test: super-block free i-node count invalid (is {0:D0}, require n <= 100)", p);
             l = 2 * p;
             for (Int32 i = 0; i < l; i += 2)
             {
-                if (((p = SB.GetUInt16L(208 + i)) < 1) || (p > isize * 16)) return Program.Debug(false, 1, "Unix.Test: super-block free i-number {0:D0} invalid (is {1:D0}, require 1 <= n < {2:D0})", i / 2, p, isize * 16);
+                if (((p = SB.GetUInt16L(208 + i)) < 1) || (p > isize * 16)) return Debug.WriteLine(false, 1, "Unix.Test: super-block free i-number {0:D0} invalid (is {1:D0}, require 1 <= n < {2:D0})", i / 2, p, isize * 16);
             }
             size = n;
             type = typeof(Unix);
@@ -427,16 +427,16 @@ namespace FSX
             {
                 iNode = Inode.Get(volume, iNum);
                 // sometimes a free i-node has 'nlinks' -1. or other values.
-                //if (((iNode.flags & 0x8000) == 0) && (iNode.nlinks != 0) && (iNode.nlinks != 255)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
-                if (((iNode.flags & 0x8000) != 0) && (iNode.nlinks == 0)) return Program.Debug(false, 1, "Unix.Test: i-node {1:D0} is used but has zero link count", iNum);
-                if (((iNode.flags & 0x1000) == 0) && (iNode.size > 4096)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} size exceeds small file limit (is {1:D0}, require n <= 4096)", iNum, iNode.size);
-                if (((iNode.flags & 0x1000) != 0) && (iNode.size > 1048576)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} size exceeds large file limit (is {1:D0}, require n <= 1048576)", iNum, iNode.size);
+                //if (((iNode.flags & 0x8000) == 0) && (iNode.nlinks != 0) && (iNode.nlinks != 255)) return Debug.WriteLine(false, 1, "Unix.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
+                if (((iNode.flags & 0x8000) != 0) && (iNode.nlinks == 0)) return Debug.WriteLine(false, 1, "Unix.Test: i-node {1:D0} is used but has zero link count", iNum);
+                if (((iNode.flags & 0x1000) == 0) && (iNode.size > 4096)) return Debug.WriteLine(false, 1, "Unix.Test: i-node {0:D0} size exceeds small file limit (is {1:D0}, require n <= 4096)", iNum, iNode.size);
+                if (((iNode.flags & 0x1000) != 0) && (iNode.size > 1048576)) return Debug.WriteLine(false, 1, "Unix.Test: i-node {0:D0} size exceeds large file limit (is {1:D0}, require n <= 1048576)", iNum, iNode.size);
             }
             if (level == 3) return true;
 
             // level 4 - check directory structure (return volume size and type)
             iNode = Inode.Get(volume, 1);
-            if ((iNode.flags & 0xe000) != 0xc000) return Program.Debug(false, 1, "Unix.Test: root directory i-node type/used flags invalid (is 0x{0:x4}, require 0xc000)", iNode.flags & 0xe000);
+            if ((iNode.flags & 0xe000) != 0xc000) return Debug.WriteLine(false, 1, "Unix.Test: root directory i-node type/used flags invalid (is 0x{0:x4}, require 0xc000)", iNode.flags & 0xe000);
             UInt16[] IMap = new UInt16[isize * 16 + 1]; // inode usage map
             Queue<Int32> DirList = new Queue<Int32>(); // queue of directories to examine
             DirList.Enqueue((1 << 16) + 1); // parent inum in high word, directory inum in low word (root is its own parent)
@@ -445,32 +445,32 @@ namespace FSX
                 Int32 dNum = DirList.Dequeue();
                 Int32 pNum = dNum >> 16;
                 dNum &= 0xffff;
-                if (IMap[dNum] != 0) return Program.Debug(false, 1, "Unix.Test: directory i-node {0:D0} appears more than once in directory structure", dNum);
+                if (IMap[dNum] != 0) return Debug.WriteLine(false, 1, "Unix.Test: directory i-node {0:D0} appears more than once in directory structure", dNum);
                 IMap[dNum]++; // assume a link to this directory from its parent (root directory gets fixed later)
                 Byte[] buf = ReadFile(volume, Inode.Get(volume, dNum));
                 Boolean df = false;
                 Boolean ddf = false;
                 for (Int32 bp = 0; bp < buf.Length; bp += 16)
                 {
-                    UInt16 iNum = Program.ToUInt16L(buf, bp);
+                    UInt16 iNum = Buffer.GetUInt16L(buf, bp);
                     if (iNum == 0) continue;
                     for (p = 2; p < 16; p++) if (buf[bp + p] == 0) break;
                     String name = Encoding.ASCII.GetString(buf, bp + 2, p - 2);
                     if (String.Compare(name, ".") == 0)
                     {
-                        if (iNum != dNum) return Program.Debug(false, 1, "Unix.Test: in directory i={0:D0}, entry \".\" does not refer to itself (is {1:D0}, require {2:D0})", dNum, iNum, dNum);
+                        if (iNum != dNum) return Debug.WriteLine(false, 1, "Unix.Test: in directory i={0:D0}, entry \".\" does not refer to itself (is {1:D0}, require {2:D0})", dNum, iNum, dNum);
                         IMap[iNum]++;
                         df = true;
                     }
                     else if (String.Compare(name, "..") == 0)
                     {
-                        if (iNum != pNum) return Program.Debug(false, 1, "Unix.Test: in directory i={0:D0}, entry \"..\" does not refer to parent (is {1:D0}, require {2:D0})", dNum, iNum, pNum);
+                        if (iNum != pNum) return Debug.WriteLine(false, 1, "Unix.Test: in directory i={0:D0}, entry \"..\" does not refer to parent (is {1:D0}, require {2:D0})", dNum, iNum, pNum);
                         IMap[iNum]++;
                         ddf = true;
                     }
                     else if ((iNum < 2) || (iNum > isize * 16))
                     {
-                        return Program.Debug(false, 1, "Unix.Test: in directory i={0:D0}, entry \"{1}\" has invalid i-number (is {2:D0}, require 2 <= n <= {3:D0})", dNum, name, iNum, isize * 16);
+                        return Debug.WriteLine(false, 1, "Unix.Test: in directory i={0:D0}, entry \"{1}\" has invalid i-number (is {2:D0}, require 2 <= n <= {3:D0})", dNum, name, iNum, isize * 16);
                     }
                     else if (((iNode = Inode.Get(volume, iNum)).flags & 0x6000) == 0x4000) // directory
                     {
@@ -481,8 +481,8 @@ namespace FSX
                         IMap[iNum]++;
                     }
                 }
-                if (!df) return Program.Debug(false, 1, "Unix.Test: in directory i={0:D0}, entry \".\" is missing", dNum);
-                if (!ddf) return Program.Debug(false, 1, "Unix.Test: in directory i={0:D0}, entry \"..\" is missing", dNum);
+                if (!df) return Debug.WriteLine(false, 1, "Unix.Test: in directory i={0:D0}, entry \".\" is missing", dNum);
+                if (!ddf) return Debug.WriteLine(false, 1, "Unix.Test: in directory i={0:D0}, entry \"..\" is missing", dNum);
             }
             IMap[1]--; // root directory has no parent, so back out the implied parent link
             if (level == 4) return true;
@@ -491,16 +491,16 @@ namespace FSX
             for (UInt16 iNum = 1; iNum <= isize * 16; iNum++)
             {
                 iNode = Inode.Get(volume, iNum);
-                if (((iNode.flags & 0x8000) == 0) && (IMap[iNum] != 0)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} is marked free but has {1:D0} link(s)", iNum, IMap[iNum]);
-                if (((iNode.flags & 0x8000) != 0) && (IMap[iNum] == 0)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} is marked used but has no links", iNum);
-                if (((iNode.flags & 0x8000) != 0) && (IMap[iNum] != iNode.nlinks)) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} link count mismatch (is {1:D0}, expect {2:D0})", iNum, iNode.nlinks, IMap[iNum]);
+                if (((iNode.flags & 0x8000) == 0) && (IMap[iNum] != 0)) return Debug.WriteLine(false, 1, "Unix.Test: i-node {0:D0} is marked free but has {1:D0} link(s)", iNum, IMap[iNum]);
+                if (((iNode.flags & 0x8000) != 0) && (IMap[iNum] == 0)) return Debug.WriteLine(false, 1, "Unix.Test: i-node {0:D0} is marked used but has no links", iNum);
+                if (((iNode.flags & 0x8000) != 0) && (IMap[iNum] != iNode.nlinks)) return Debug.WriteLine(false, 1, "Unix.Test: i-node {0:D0} link count mismatch (is {1:D0}, expect {2:D0})", iNum, iNode.nlinks, IMap[iNum]);
             }
             // also check super-block free list
             p = SB.GetInt16L(206);
             for (Int32 i = 0; i < 2 * p; i += 2)
             {
                 UInt16 iNum = SB.GetUInt16L(208 + i);
-                if (IMap[iNum] != 0) return Program.Debug(false, 1, "Unix.Test: i-node {0:D0} is in super-block free list, but has {1:D0} link(s)", iNum, IMap[iNum]);
+                if (IMap[iNum] != 0) return Debug.WriteLine(false, 1, "Unix.Test: i-node {0:D0} is in super-block free list, but has {1:D0} link(s)", iNum, IMap[iNum]);
             }
             if (level == 5) return true;
 
@@ -519,9 +519,9 @@ namespace FSX
                     {
                         Int32 b = iNode[p]; // direct block
                         if (b == 0) continue;
-                        if ((b < isize + 2) || (b >= size)) return Program.Debug(false, 1, "Unix.Test: block {0:D0} of i-node {1:D0} falls outside volume block range (is {2:D0}, require {3:D0} <= n < {4:D0}", p, iNum, b, isize + 2, size);
-                        if (b > volume.BlockCount) Program.Debug(1, "Unix.Test: WARNING: block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p, iNum, b, volume.BlockCount);
-                        if (BMap[b] != 0) return Program.Debug(false, 1, "Unix.Test: block {0:D0} of i-node {1:D0} is also allocated to i-node {2:D0}", p, iNum, BMap[b]);
+                        if ((b < isize + 2) || (b >= size)) return Debug.WriteLine(false, 1, "Unix.Test: block {0:D0} of i-node {1:D0} falls outside volume block range (is {2:D0}, require {3:D0} <= n < {4:D0}", p, iNum, b, isize + 2, size);
+                        if (b > volume.BlockCount) Debug.WriteLine(1, "Unix.Test: WARNING: block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p, iNum, b, volume.BlockCount);
+                        if (BMap[b] != 0) return Debug.WriteLine(false, 1, "Unix.Test: block {0:D0} of i-node {1:D0} is also allocated to i-node {2:D0}", p, iNum, BMap[b]);
                         BMap[b] = iNum;
                     }
                 }
@@ -532,20 +532,20 @@ namespace FSX
                     {
                         Int32 i = iNode[p / 256]; // indirect block
                         if (i == 0) continue;
-                        if ((i < isize + 2) || (i >= size)) return Program.Debug(false, 1, "Unix.Test: indirect block {0:D0} of i-node {1:D0} falls outside volume block range (is {2:D0}, require {3:D0} <= n < {4:D0}", p / 256, iNum, i, isize + 2, size);
-                        if (i > volume.BlockCount) return Program.Debug(false, 1, "Unix.Test: indirect block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p / 256, iNum, i, volume.BlockCount);
+                        if ((i < isize + 2) || (i >= size)) return Debug.WriteLine(false, 1, "Unix.Test: indirect block {0:D0} of i-node {1:D0} falls outside volume block range (is {2:D0}, require {3:D0} <= n < {4:D0}", p / 256, iNum, i, isize + 2, size);
+                        if (i > volume.BlockCount) return Debug.WriteLine(false, 1, "Unix.Test: indirect block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p / 256, iNum, i, volume.BlockCount);
                         Int32 b = volume[i].GetUInt16L((p % 256) * 2); // direct block
                         if (b == 0) continue;
-                        if ((b < isize + 2) || (b >= size)) return Program.Debug(false, 1, "Unix.Test: block {0:D0} of i-node {1:D0} falls outside volume block range (is {2:D0}, require {3:D0} <= n < {4:D0}", p, iNum, b, isize + 2, size);
-                        if (b > volume.BlockCount) Program.Debug(1, "Unix.Test: WARNING: block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p, iNum, b, volume.BlockCount);
-                        if (BMap[b] != 0) return Program.Debug(false, 1, "Unix.Test: block {0:D0} of i-node {1:D0} is also allocated to i-node {2:D0}", p, iNum, BMap[b]);
+                        if ((b < isize + 2) || (b >= size)) return Debug.WriteLine(false, 1, "Unix.Test: block {0:D0} of i-node {1:D0} falls outside volume block range (is {2:D0}, require {3:D0} <= n < {4:D0}", p, iNum, b, isize + 2, size);
+                        if (b > volume.BlockCount) Debug.WriteLine(1, "Unix.Test: WARNING: block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p, iNum, b, volume.BlockCount);
+                        if (BMap[b] != 0) return Debug.WriteLine(false, 1, "Unix.Test: block {0:D0} of i-node {1:D0} is also allocated to i-node {2:D0}", p, iNum, BMap[b]);
                         BMap[b] = iNum;
                     }
                     for (p = 0; p < n; p += 256)
                     {
                         Int32 i = iNode[p / 256]; // indirect block
                         if (i == 0) continue;
-                        if (BMap[i] != 0) return Program.Debug(false, 1, "Unix.Test: indirect block {0:D0} of i-node {1:D0} is also allocated to i-node {2:D0}", i, iNum, BMap[i]);
+                        if (BMap[i] != 0) return Debug.WriteLine(false, 1, "Unix.Test: indirect block {0:D0} of i-node {1:D0} is also allocated to i-node {2:D0}", i, iNum, BMap[i]);
                         BMap[i] = iNum;
                     }
                 }
@@ -559,23 +559,23 @@ namespace FSX
             {
                 p = SB.GetUInt16L(6 + i);
                 if (p == 0) continue;
-                if ((p < isize + 2) || (p >= size)) return Program.Debug(false, 1, "Unix.Test: block {0:D0} in super-block free list falls outside volume block range (require {1:D0} <= n < {2:D0})", p, isize + 2, size);
-                if (BMap[p] != 0) return Program.Debug(false, 1, "Unix.Test: block {0:D0} in super-block free list is allocated", p);
+                if ((p < isize + 2) || (p >= size)) return Debug.WriteLine(false, 1, "Unix.Test: block {0:D0} in super-block free list falls outside volume block range (require {1:D0} <= n < {2:D0})", p, isize + 2, size);
+                if (BMap[p] != 0) return Debug.WriteLine(false, 1, "Unix.Test: block {0:D0} in super-block free list is allocated", p);
                 BMap[p] = 2;
             }
             p = SB.GetUInt16L(6);
             while (p != 0)
             {
-                if ((p < isize + 2) || (p >= size)) return Program.Debug(false, 1, "Unix.Test: link block {0:D0} in free block chain falls outside volume block range (require {1:D0} <= n < {2:D0})", p, isize + 2, size);
-                if (p >= volume.BlockCount) return Program.Debug(false, 1, "Unix.Test: link block {0:D0} in free block chain falls outside image block range (expect n < {1:D0})", p, volume.BlockCount);
+                if ((p < isize + 2) || (p >= size)) return Debug.WriteLine(false, 1, "Unix.Test: link block {0:D0} in free block chain falls outside volume block range (require {1:D0} <= n < {2:D0})", p, isize + 2, size);
+                if (p >= volume.BlockCount) return Debug.WriteLine(false, 1, "Unix.Test: link block {0:D0} in free block chain falls outside image block range (expect n < {1:D0})", p, volume.BlockCount);
                 Block B = volume[p];
                 n = B.GetUInt16L(0);
                 for (Int32 i = 0; i < 2 * n; i += 2)
                 {
                     p = B.GetUInt16L(2 + i);
                     if (p == 0) continue;
-                    if ((p < isize + 2) || (p >= size)) return Program.Debug(false, 1, "Unix.Test: block {0:D0} in free block chain falls outside volume block range (require {1:D0} <= n < {2:D0})", p, isize + 2, size);
-                    if (BMap[p] != 0) return Program.Debug(false, 1, "Unix.Test: block {0:D0} in free block chain is allocated", p);
+                    if ((p < isize + 2) || (p >= size)) return Debug.WriteLine(false, 1, "Unix.Test: block {0:D0} in free block chain falls outside volume block range (require {1:D0} <= n < {2:D0})", p, isize + 2, size);
+                    if (BMap[p] != 0) return Debug.WriteLine(false, 1, "Unix.Test: block {0:D0} in free block chain is allocated", p);
                     BMap[p] = 2;
                 }
                 p = B.GetUInt16L(2);
@@ -583,7 +583,7 @@ namespace FSX
             // unmarked blocks are lost
             for (Int32 i = 0; i < size; i++)
             {
-                if (BMap[i] == 0) return Program.Debug(false, 1, "Unix.Test: block {0:D0} is not allocated and not in free list", i);
+                if (BMap[i] == 0) return Debug.WriteLine(false, 1, "Unix.Test: block {0:D0} is not allocated and not in free list", i);
             }
             if (level == 6) return true;
 
@@ -632,7 +632,7 @@ namespace FSX
             p = p.Replace("?", ".").Replace("*", @".*");
             p = p.Replace("\ufffd", "\\.");
             p = String.Concat("^", p, "$");
-            Program.Debug(2, "Regex: {0} => {1}", pattern, p);
+            Debug.WriteLine(2, "Regex: {0} => {1}", pattern, p);
             return new Regex(p);
         }
     }

@@ -139,7 +139,7 @@ namespace FSX
                 {
                     if (test(image, level, out size, out type))
                     {
-                        Program.Debug(2, "Pass: {0} level {1:D0}", test.Method.DeclaringType.Name, level);
+                        Debug.WriteLine(2, "Pass: {0} level {1:D0}", test.Method.DeclaringType.Name, level);
                         L.Add(new Entry(test, image));
                         continue;
                     }
@@ -148,7 +148,7 @@ namespace FSX
                         Volume volume = new ClusteredVolume(image, size / image.BlockSize, 0);
                         if (test(volume, level, out size, out type))
                         {
-                            Program.Debug(2, "Pass: {0} level {1:D0} (with ClusteredVolume)", test.Method.DeclaringType.Name, level);
+                            Debug.WriteLine(2, "Pass: {0} level {1:D0} (with ClusteredVolume)", test.Method.DeclaringType.Name, level);
                             L.Add(new Entry(test, volume));
                             continue;
                         }
@@ -170,7 +170,7 @@ namespace FSX
                         Type t;
                         if (e.Test(e.Volume, level, out s, out t))
                         {
-                            Program.Debug(2, "Pass: {0} level {1:D0}", e.Test.Method.DeclaringType.Name, level);
+                            Debug.WriteLine(2, "Pass: {0} level {1:D0}", e.Test.Method.DeclaringType.Name, level);
                             volume = e.Volume;
                             size = s;
                             type = t;

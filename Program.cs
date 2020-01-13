@@ -54,7 +54,7 @@ namespace FSX
 {
     class Program
     {
-        public struct VDE
+        public struct VDE // Volume Dictionary Entry
         {
             public String Key;
             public FileSystem FS;
@@ -75,7 +75,6 @@ namespace FSX
         static public TextWriter Out = Console.Out;
         static public VDE Vol;
         static public Int32 Verbose = 1;
-        static public Int32 DebugLevel = 0;
 
         static private Dictionary<String, VDE> VolMap = new Dictionary<String, VDE>(StringComparer.OrdinalIgnoreCase);
 
@@ -102,7 +101,7 @@ namespace FSX
                         Int32 n;
                         if ((Int32.TryParse(opt, out n)) && (n >= 0) && (n <= 9)) // 0-9 limit is arbitrary
                         {
-                            DebugLevel = n;
+                            Debug.DebugLevel = n;
                         }
                         else
                         {
@@ -190,7 +189,7 @@ namespace FSX
                 else if ((cmd == "source") || (cmd == "."))
                 {
                     StreamReader file = new StreamReader(arg);
-                    CommandLoop(file);
+                    CommandLoop(file); // TODO: prevent endless recursion due to sourcing a file already being sourced
                 }
                 else if (cmd == "help")
                 {
@@ -204,7 +203,7 @@ namespace FSX
                 else if ((cmd == "deb") || (cmd == "debug"))
                 {
                     Int32 n;
-                    if (Int32.TryParse(arg, out n)) DebugLevel = n;
+                    if (Int32.TryParse(arg, out n)) Debug.DebugLevel = n;
                 }
                 else if ((cmd == "vols") || (cmd == "volumes"))
                 {
@@ -791,7 +790,7 @@ namespace FSX
                     // using 'standard' 1:1 interleave diskettes, maintaining interoperability for
                     // data transfer with other systems, and removing the need to reformat disks.
                     // 'Soft' sector interleave is 2:1, with a 6 sector track-to-track skew.
-                    Debug(2, "RX01/RX02 image, also testing with interleave applied");
+                    Debug.WriteLine(2, "RX01/RX02 image, also testing with interleave applied");
                     Int32 n = 512 / volume.BlockSize;
                     Volume d2 = new ClusteredVolume(new InterleavedVolume(volume, 2, 0, 6, 26), n, 26); // if image includes track 0
                     Volume d3 = new ClusteredVolume(new InterleavedVolume(volume, 2, 0, 6, 0), n, 0); // if image starts at track 1
@@ -801,7 +800,7 @@ namespace FSX
                 {
                     // DEC RX50 Floppy - 5.25" SSDD diskette, 80 tracks, 10 sectors
                     // 'Soft' sector interleave is 2:1, with a 2 sector track-to-track skew.
-                    Debug(2, "RX50 image, also testing with interleave applied");
+                    Debug.WriteLine(2, "RX50 image, also testing with interleave applied");
                     Volume d2 = new InterleavedVolume(volume, 2, 0, 2, 0);
                     return Auto.Check(new Volume[] { volume, d2 });
                 }
@@ -1064,7 +1063,7 @@ namespace FSX
                         String s = "   ";
                         if ((i + j + 1 < data.Length) && (j + 1 < l))
                         {
-                            UInt16 w = Program.ToUInt16L(data, i + j);
+                            UInt16 w = Buffer.GetUInt16L(data, i + j);
                             Radix50.TryConvert(w, ref s);
                         }
                         output.Write(s);
@@ -1111,34 +1110,6 @@ namespace FSX
                     n = bytesPerSection;
                 }
             }
-        }
-
-        static public void Debug(Int32 messageLevel, String format, params Object[] args)
-        {
-            if (DebugLevel >= messageLevel) Console.Error.WriteLine(format, args);
-        }
-
-        static public Boolean Debug(Boolean returnValue, Int32 messageLevel, String format, params Object[] args)
-        {
-            Debug(messageLevel, format, args);
-            return returnValue;
-        }
-
-        static public Int16 ToInt16L(Byte[] data, Int32 index)
-        {
-            return (BitConverter.IsLittleEndian) ? BitConverter.ToInt16(Reverse(data, index, 2), 0) : BitConverter.ToInt16(data, index);
-        }
-
-        static public UInt16 ToUInt16L(Byte[] data, Int32 index)
-        {
-            return (BitConverter.IsLittleEndian) ? BitConverter.ToUInt16(data, index) : BitConverter.ToUInt16(Reverse(data, index, 2), 0);
-        }
-
-        static private Byte[] Reverse(Byte[] data, Int32 index, Int32 count)
-        {
-            Byte[] buf = new Byte[count];
-            for (Int32 i = count; i > 0; ) buf[--i] = data[index++];
-            return buf;
         }
     }
 }

@@ -131,11 +131,6 @@ namespace FSX
             mDirSeq = 4;
         }
 
-        public override Volume Volume
-        {
-            get { return mVol; }
-        }
-
         public override String Source
         {
             get { return mVol.Source; }
@@ -144,6 +139,11 @@ namespace FSX
         public override String Type
         {
             get { return "ODS1"; }
+        }
+
+        public override String Info
+        {
+            get { return mVol.Info; }
         }
 
         public override String Dir

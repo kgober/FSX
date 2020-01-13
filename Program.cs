@@ -28,6 +28,7 @@
 
 
 // Future Improvements / To Do
+// apply consistent style for "public static" and "private static"
 // improve exception handling
 // improve argument parsing
 // improve 'force' mount of damaged or unrecognizable volumes
@@ -216,7 +217,7 @@ namespace FSX
                 else if (cmd == "info")
                 {
                     VDE v = ParseVol(ref arg);
-                    Out.WriteLine(v.FS.Volume.Info);
+                    Out.WriteLine(v.FS.Info);
                 }
                 else if (cmd == "test")
                 {

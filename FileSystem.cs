@@ -32,9 +32,9 @@ namespace FSX
 {
     abstract partial class FileSystem
     {
-        public abstract Volume Volume { get; }                                                  // volume where FileSystem resides
-        public abstract String Source { get; }                                                  // source where volume is loaded from
-        public abstract String Type { get; }                                                    // type of file system on this volume
+        public abstract String Source { get; }                                                  // source where file system was loaded from
+        public abstract String Type { get; }                                                    // type of file system
+        public abstract String Info { get; }                                                    // additional file system information
         public abstract String Dir { get; }                                                     // current directory on this volume
         public abstract Encoding DefaultEncoding { get; }                                       // default encoding of text data
 

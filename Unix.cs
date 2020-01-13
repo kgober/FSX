@@ -122,11 +122,6 @@ namespace FSX
             mDir = "/";
         }
 
-        public override Volume Volume
-        {
-            get { return mVol; }
-        }
-
         public override String Source
         {
             get { return mVol.Source; }
@@ -135,6 +130,11 @@ namespace FSX
         public override String Type
         {
             get { return mType; }
+        }
+
+        public override String Info
+        {
+            get { return mVol.Info; }
         }
 
         public override String Dir

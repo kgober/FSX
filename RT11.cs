@@ -102,11 +102,6 @@ namespace FSX
             mDir = new ClusteredVolume(volume, 2, mDirStart - 2, 32);
         }
 
-        public override Volume Volume
-        {
-            get { return mVol; }
-        }
-
         public override String Source
         {
             get { return mVol.Source; }
@@ -115,6 +110,11 @@ namespace FSX
         public override String Type
         {
             get { return "RT11"; }
+        }
+
+        public override String Info
+        {
+            get { return mVol.Info; }
         }
 
         public override String Dir

@@ -21,6 +21,7 @@
 
 
 using System;
+using System.Text;
 
 namespace FSX
 {
@@ -102,6 +103,48 @@ namespace FSX
             UInt16 n = BitConverter.ToUInt16(buf, offset);
             offset += 2;
             return n;
+        }
+
+        static public String GetString(Byte[] buffer, Int32 offset, Int32 count, Encoding encoding)
+        {
+            return encoding.GetString(buffer, offset, count);
+        }
+
+        static public String GetCString(Byte[] buffer, Int32 offset, Int32 maxCount, Encoding encoding)
+        {
+            Int32 n = 0;
+            for (Int32 i = offset; i < buffer.Length; i++)
+            {
+                if (buffer[i] == 0)
+                {
+                    n = i - offset;
+                    break;
+                }
+            }
+            if (n > maxCount) n = maxCount;
+            return encoding.GetString(buffer, offset, n);
+        }
+
+        static public Int32 IndexOf(Byte[] buffer, Int32 offset, String pattern, Encoding encoding)
+        {
+            Byte[] pat = encoding.GetBytes(pattern);
+            Int32 n = buffer.Length - pat.Length;
+            for (Int32 i = offset; i < n; i++)
+            {
+                if (buffer[i] != pat[0]) continue;
+                Boolean f = false;
+                for (Int32 j = 1; j < pat.Length; j++)
+                {
+                    if (buffer[i + j] != pat[j])
+                    {
+                        f = true;
+                        break;
+                    }
+                }
+                if (f) continue;
+                return i;
+            }
+            return -1;
         }
 
         static private Byte[] Reverse(Byte[] buffer, Int32 offset, Int32 count)

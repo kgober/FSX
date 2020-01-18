@@ -29,6 +29,7 @@
 
 
 using System;
+using System.Text;
 
 namespace FSX
 {
@@ -50,6 +51,9 @@ namespace FSX
         public abstract UInt16 GetUInt16B(ref Int32 offset);
         public abstract UInt16 GetUInt16L(Int32 offset);
         public abstract UInt16 GetUInt16L(ref Int32 offset);
+        public abstract String GetString(Int32 offset, Int32 count, Encoding encoding);
+        public abstract String GetCString(Int32 offset, Int32 maxCount, Encoding encoding);
+        public abstract Int32 IndexOf(Int32 offset, String pattern, Encoding encoding);
     }
 
 
@@ -189,6 +193,48 @@ namespace FSX
         public override UInt16 GetUInt16L(ref Int32 offset)
         {
             return Buffer.GetUInt16L(mData, ref offset);
+        }
+
+        public override String GetString(Int32 offset, Int32 count, Encoding encoding)
+        {
+            return encoding.GetString(mData, offset, count);
+        }
+
+        public override String GetCString(Int32 offset, Int32 maxCount, Encoding encoding)
+        {
+            Int32 n = mData.Length - offset;
+            if (n > maxCount) n = maxCount;
+            for (Int32 i = 0; i < n; i++)
+            {
+                if (mData[offset + i] == 0)
+                {
+                    n = i;
+                    break;
+                }
+            }
+            return encoding.GetString(mData, offset, n);
+        }
+
+        public override Int32 IndexOf(Int32 offset, String pattern, Encoding encoding)
+        {
+            Byte[] pat = encoding.GetBytes(pattern);
+            Int32 n = mData.Length - pat.Length;
+            for (Int32 i = offset; i < n; i++)
+            {
+                if (mData[i] != pat[0]) continue;
+                Boolean f = false;
+                for (Int32 j = 1; j < pat.Length; j++)
+                {
+                    if (mData[i + j] != pat[j])
+                    {
+                        f = true;
+                        break;
+                    }
+                }
+                if (f) continue;
+                return i;
+            }
+            return -1;
         }
     }
 
@@ -455,6 +501,78 @@ namespace FSX
             }
             offset += 2;
             return n;
+        }
+
+        public override String GetString(Int32 offset, Int32 count, Encoding encoding)
+        {
+            Int32 p = offset / mBlockSize;
+            Int32 q = (offset + count - 1) / mBlockSize;
+            if (p == q)
+            {
+                return mData[p].GetString(offset % mBlockSize, count, encoding);
+            }
+            else
+            {
+                Byte[] buffer = new Byte[count];
+                count = CopyTo(buffer, 0, offset, count);
+                return encoding.GetString(buffer, 0, count);
+            }
+        }
+
+        public override String GetCString(Int32 offset, Int32 maxCount, Encoding encoding)
+        {
+            Int32 p = offset / mBlockSize;
+            Int32 q = (offset + maxCount - 1) / mBlockSize;
+            if (p == q)
+            {
+                return mData[p].GetCString(offset % mBlockSize, maxCount, encoding);
+            }
+            else
+            {
+                Int32 n = mData.Length * mBlockSize - offset;
+                if (n > maxCount) n = maxCount;
+                for (Int32 i = 0; i < n; i++)
+                {
+                    if (this[offset + i] == 0)
+                    {
+                        n = i;
+                        break;
+                    }
+                }
+                q = (offset + n - 1) / mBlockSize;
+                if (p == q)
+                {
+                    return mData[p].GetCString(offset % mBlockSize, n, encoding);
+                }
+                else
+                {
+                    Byte[] buffer = new Byte[n];
+                    n = CopyTo(buffer, 0, offset, n);
+                    return encoding.GetString(buffer, 0, n);
+                }
+            }
+        }
+
+        public override Int32 IndexOf(Int32 offset, String pattern, Encoding encoding)
+        {
+            Byte[] pat = encoding.GetBytes(pattern);
+            Int32 n = mData.Length * mBlockSize - pat.Length;
+            for (Int32 i = offset; i < n; i++)
+            {
+                if (this[i] != pat[0]) continue;
+                Boolean f = false;
+                for (Int32 j = 1; j < pat.Length; j++)
+                {
+                    if (this[i + j] != pat[j])
+                    {
+                        f = true;
+                        break;
+                    }
+                }
+                if (f) continue;
+                return i;
+            }
+            return -1;
         }
     }
 

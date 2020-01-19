@@ -461,7 +461,7 @@ namespace FSX
                         {
                             Byte[] old = data;
                             data = new Byte[old.Length - n];
-                            for (Int32 i = 0; i < data.Length; i++) data[i] = old[n++];
+                            for (Int32 i = 0; i < data.Length; i++) data[i] = old[n + i];
                             s = String.Format("{0} [Skip={1}]", s, FormatNum(n));
                         }
                     }

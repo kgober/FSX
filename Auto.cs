@@ -173,7 +173,7 @@ namespace FSX
                             Debug.WriteLine(2, "Pass: {0} level {1:D0}", e.Test.Method.DeclaringType.Name, level);
                             volume = e.Volume;
                             size = s;
-                            type = t;
+                            type = e.Test.Method.DeclaringType;
                             L2.Add(e);
                         }
                     }

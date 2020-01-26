@@ -25,6 +25,7 @@
 // support cylinder/head mapping
 // support .IMD file writing
 
+
 using System;
 using System.Text;
 
@@ -32,6 +33,13 @@ namespace FSX
 {
     class ImageDisk
     {
+        public static Boolean HasHeader(Byte[] data)
+        {
+            if (data.Length < 32) return false;
+            if (Buffer.IndexOf(data, 0, "IMD ", Encoding.ASCII) != 0) return false;
+            return true;
+        }
+
         // Load ImageDisk .IMD image file
         public static CHSVolume Load(String source, Byte[] data)
         {

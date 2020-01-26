@@ -521,7 +521,7 @@ namespace FSX
                 data = Compress.Decompress(data);
                 path = String.Concat(path.Substring(0, path.Length - 3), "tar");
             }
-            if ((path.EndsWith(".imd", StringComparison.OrdinalIgnoreCase)) && (data.Length > 31) && (IndexOf(Encoding.ASCII, "IMD ", data, 0, 4) == 0))
+            if ((path.EndsWith(".imd", StringComparison.OrdinalIgnoreCase)) && (ImageDisk.HasHeader(data)))
             {
                 // ImageDisk .IMD image file
                 CHSVolume d = ImageDisk.Load(s, data);

@@ -9,7 +9,8 @@ Currently the following types of volumes are supported:
 
 The following storage formats are supported:
 * ImageDisk (.IMD) files
-* gzip (.gz) files
+* gzip (.gz) compressed files
+* Compress (.Z) compressed files
 * .d64/.d67/.d80/.d82 files
 * raw block images
 
@@ -20,6 +21,7 @@ To use FSX, simply run it from a console window such as the Windows Command Prom
 * save|write id pathname - export image of volume 'id:' to file 'pathname'
 * unload|unmount|umount id - unmount volume 'id:'
 * vols|volumes - show mounted volumes
+* info [id:] - show volume information
 * dirs - show current working directory for each mounted volume
 * pwd - show current working directory on current volume
 * id: - change current volume to 'id:'
@@ -31,9 +33,11 @@ To use FSX, simply run it from a console window such as the Windows Command Prom
 * save|write [id:]file pathname - export image of file 'file' to file 'pathname'
 * verb|verbose n - set verbosity level (default 0)
 * deb|debug n - set debug level (default 0)
+* source|. pathname - read commands from 'pathname'
 * help - show this text
 * exit|quit - exit program
 
 load/mount options:
 * \<skip=num\> - skip first 'num' bytes of 'pathname'
 * \<pad=num\> - pad end of 'pathname' with 'num' zero bytes
+* \<type=name\> - mount as a file system of type 'name'

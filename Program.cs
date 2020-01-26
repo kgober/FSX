@@ -48,7 +48,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Text;
 
 namespace FSX
@@ -499,11 +498,17 @@ namespace FSX
             }
 
             // try to identify storage format based on file extension
-            if ((path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)) && (data.Length > 18) && (data[0] == 0x1f) && (data[1] == 0x8b))
+            if ((path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)) && (GZip.HasHeader(data)))
             {
                 // gzip compressed data
-                data = DecompressGZip(data);
+                data = GZip.Decompress(data);
                 path = path.Substring(0, path.Length - 3);
+            }
+            if ((path.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase)) && (GZip.HasHeader(data)))
+            {
+                // gzip compressed tar file
+                data = GZip.Decompress(data);
+                path = String.Concat(path.Substring(0, path.Length - 3), "tar");
             }
             if ((path.EndsWith(".imd", StringComparison.OrdinalIgnoreCase)) && (data.Length > 31) && (IndexOf(Encoding.ASCII, "IMD ", data, 0, 4) == 0))
             {
@@ -807,16 +812,6 @@ namespace FSX
                 }
             }
             return Auto.Check(new Volume[] { image });
-        }
-
-        static Byte[] DecompressGZip(Byte[] data)
-        {
-            GZipStream i = new GZipStream(new MemoryStream(data), CompressionMode.Decompress);
-            MemoryStream o = new MemoryStream();
-            Byte[] buf = new Byte[4096];
-            Int32 n;
-            while ((n = i.Read(buf, 0, 4096)) != 0) o.Write(buf, 0, n);
-            return o.ToArray();
         }
 
         static void ShowHelp()

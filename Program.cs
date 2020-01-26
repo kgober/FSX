@@ -41,7 +41,6 @@
 // add support for ISO-9660 volumes
 // add support for 7-Zip files (.7z)
 // add support for ZIP files
-// add support for tar files
 
 
 using System;

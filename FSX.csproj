@@ -35,6 +35,7 @@
   <ItemGroup>
     <Compile Include="CBMDOS.cs" />
     <Compile Include="Commodore.cs" />
+    <Compile Include="Compress.cs" />
     <Compile Include="GZip.cs" />
     <Compile Include="Utility.cs" />
     <Compile Include="Volume.cs" />

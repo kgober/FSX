@@ -42,7 +42,6 @@
 // add support for 7-Zip files (.7z)
 // add support for ZIP files
 // add support for tar files
-// add support for compressed files (.Z)
 
 
 using System;
@@ -508,6 +507,18 @@ namespace FSX
             {
                 // gzip compressed tar file
                 data = GZip.Decompress(data);
+                path = String.Concat(path.Substring(0, path.Length - 3), "tar");
+            }
+            if ((path.EndsWith(".Z", StringComparison.OrdinalIgnoreCase)) && (Compress.HasHeader(data)))
+            {
+                // .Z compressed data
+                data = Compress.Decompress(data);
+                path = path.Substring(0, path.Length - 2);
+            }
+            if ((path.EndsWith(".taz", StringComparison.OrdinalIgnoreCase)) && (Compress.HasHeader(data)))
+            {
+                // .Z compressed tar file
+                data = Compress.Decompress(data);
                 path = String.Concat(path.Substring(0, path.Length - 3), "tar");
             }
             if ((path.EndsWith(".imd", StringComparison.OrdinalIgnoreCase)) && (data.Length > 31) && (IndexOf(Encoding.ASCII, "IMD ", data, 0, 4) == 0))

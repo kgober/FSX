@@ -362,6 +362,52 @@ namespace FSX
         }
     }
 
+    partial class Unix
+    {
+        private static Byte[] ReadFile(Volume volume, Inode iNode)
+        {
+            Byte[] buf = new Byte[iNode.size];
+            if ((iNode.flags & 0x1000) == 0)
+            {
+                // Unix v5/v6 - inode links to up to 8 direct blocks
+                for (Int32 p = 0; p < iNode.size; p += 512)
+                {
+                    Int32 b = iNode[p / 512]; // direct block
+                    if ((b == 0) || (b >= volume.BlockCount)) continue;
+                    Int32 c = iNode.size - p;
+                    volume[b].CopyTo(buf, p, 0, (c > 512) ? 512 : c);
+                }
+            }
+            else
+            {
+                // Unix v5 - inode links to up to 8 indirect blocks
+                // TODO: handle Unix v6
+                for (Int32 p = 0; p < iNode.size; p += 512)
+                {
+                    Int32 b = p / 512;
+                    Int32 i = iNode[b / 256]; // indirect block
+                    if ((i == 0) || (i >= volume.BlockCount)) continue;
+                    b = volume[i].GetUInt16L((b % 256) * 2); // direct block
+                    if ((b == 0) || (b >= volume.BlockCount)) continue;
+                    Int32 c = iNode.size - p;
+                    volume[b].CopyTo(buf, p, 0, (c > 512) ? 512 : c);
+                }
+            }
+            return buf;
+        }
+
+        private static Regex Regex(String pattern)
+        {
+            String p = pattern;
+            p = p.Replace(".", "\ufffd");
+            p = p.Replace("?", ".").Replace("*", @".*");
+            p = p.Replace("\ufffd", "\\.");
+            p = String.Concat("^", p, "$");
+            Debug.WriteLine(2, "Regex: {0} => {1}", pattern, p);
+            return new Regex(p);
+        }
+    }
+
     partial class Unix : IFileSystemAuto
     {
         public static TestDelegate GetTest()
@@ -588,52 +634,6 @@ namespace FSX
             if (level == 6) return true;
 
             return false;
-        }
-    }
-
-    partial class Unix
-    {
-        private static Byte[] ReadFile(Volume volume, Inode iNode)
-        {
-            Byte[] buf = new Byte[iNode.size];
-            if ((iNode.flags & 0x1000) == 0)
-            {
-                // Unix v5/v6 - inode links to up to 8 direct blocks
-                for (Int32 p = 0; p < iNode.size; p += 512)
-                {
-                    Int32 b = iNode[p / 512]; // direct block
-                    if ((b == 0) || (b >= volume.BlockCount)) continue;
-                    Int32 c = iNode.size - p;
-                    volume[b].CopyTo(buf, p, 0, (c > 512) ? 512 : c);
-                }
-            }
-            else
-            {
-                // Unix v5 - inode links to up to 8 indirect blocks
-                // TODO: handle Unix v6
-                for (Int32 p = 0; p < iNode.size; p += 512)
-                {
-                    Int32 b = p / 512;
-                    Int32 i = iNode[b / 256]; // indirect block
-                    if ((i == 0) || (i >= volume.BlockCount)) continue;
-                    b = volume[i].GetUInt16L((b % 256) * 2); // direct block
-                    if ((b == 0) || (b >= volume.BlockCount)) continue;
-                    Int32 c = iNode.size - p;
-                    volume[b].CopyTo(buf, p, 0, (c > 512) ? 512 : c);
-                }
-            }
-            return buf;
-        }
-
-        private static Regex Regex(String pattern)
-        {
-            String p = pattern;
-            p = p.Replace(".", "\ufffd");
-            p = p.Replace("?", ".").Replace("*", @".*");
-            p = p.Replace("\ufffd", "\\.");
-            p = String.Concat("^", p, "$");
-            Debug.WriteLine(2, "Regex: {0} => {1}", pattern, p);
-            return new Regex(p);
         }
     }
 }

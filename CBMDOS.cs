@@ -353,6 +353,28 @@ namespace FSX
         }
     }
 
+    partial class CBMDOS
+    {
+        private static Track GetTrack(CHSVolume volume, Int32 track)
+        {
+            if (track < volume.MinCylinder) return null;
+            if (track > volume.MaxCylinder) return null;
+            return volume[track, volume.MinHead];
+        }
+
+        // convert a CBMDOS wildcard pattern to a Regex
+        private static Regex Regex(String pattern)
+        {
+            String p = pattern;
+            Int32 i = p.IndexOf('*');
+            if (i != -1) p = p.Substring(0, i + 1); // anything after * is irrelevant
+            p = p.Replace("?", ".").Replace("*", @".*");
+            p = String.Concat("^", p, "$");
+            Debug.WriteLine(2, "Regex: {0} => {1}", pattern, p);
+            return new Regex(p, RegexOptions.IgnoreCase);
+        }
+    }
+
     partial class CBMDOS : IFileSystemAuto
     {
         public static TestDelegate GetTest()
@@ -530,28 +552,6 @@ namespace FSX
             if (level == 6) return true;
 
             return false;
-        }
-    }
-
-    partial class CBMDOS
-    {
-        private static Track GetTrack(CHSVolume volume, Int32 track)
-        {
-            if (track < volume.MinCylinder) return null;
-            if (track > volume.MaxCylinder) return null;
-            return volume[track, volume.MinHead];
-        }
-
-        // convert a CBMDOS wildcard pattern to a Regex
-        private static Regex Regex(String pattern)
-        {
-            String p = pattern;
-            Int32 i = p.IndexOf('*');
-            if (i != -1) p = p.Substring(0, i + 1); // anything after * is irrelevant
-            p = p.Replace("?", ".").Replace("*", @".*");
-            p = String.Concat("^", p, "$");
-            Debug.WriteLine(2, "Regex: {0} => {1}", pattern, p);
-            return new Regex(p, RegexOptions.IgnoreCase);
         }
     }
 }

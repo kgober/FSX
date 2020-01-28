@@ -193,6 +193,43 @@ namespace FSX
         }
     }
 
+    partial class Tar
+    {
+        // parse bytes representing a printable octal value
+        protected static Boolean ParseOctal(Block block, Int32 offset, Int32 count, out Int32 value)
+        {
+            Int32 i = offset;
+            return ParseOctal(block, ref i, count, out value);
+        }
+
+        protected static Boolean ParseOctal(Block block, ref Int32 offset, Int32 count, out Int32 value)
+        {
+            value = -1;
+            if (block.Size - offset < count) return false;
+            Int32 p = 0;
+            while ((p < count - 1) && (block[offset + p] == ' ')) p++; // skip leading blanks
+            Int32 n = 0;
+            Int32 m = 1;
+            if (block[offset + p] == '-')
+            {
+                m = -1;
+                p++;
+            }
+            if ((p == count) || (block[offset + p] < '0') || (block[offset + p] > '7')) return false;
+            while ((p < count) && (block[offset + p] >= '0') && (block[offset + p] < '8'))
+            {
+                n *= 8;
+                n += block[offset + p++] - '0';
+            }
+            while ((p < count) && (block[offset + p] == ' ')) p++;
+            if ((p < count) && (block[offset + p] == 0)) p++;
+            if (p != count) return false;
+            offset += p;
+            value = m * n;
+            return true;
+        }
+    }
+
     partial class Tar : IFileSystemAuto
     {
         public static TestDelegate GetTest()
@@ -386,43 +423,6 @@ namespace FSX
             if (level == 6) return true;
 
             return false;
-        }
-    }
-
-    partial class Tar
-    {
-        // parse bytes representing a printable octal value
-        protected static Boolean ParseOctal(Block block, Int32 offset, Int32 count, out Int32 value)
-        {
-            Int32 i = offset;
-            return ParseOctal(block, ref i, count, out value);
-        }
-
-        protected static Boolean ParseOctal(Block block, ref Int32 offset, Int32 count, out Int32 value)
-        {
-            value = -1;
-            if (block.Size - offset < count) return false;
-            Int32 p = 0;
-            while ((p < count - 1) && (block[offset + p] == ' ')) p++; // skip leading blanks
-            Int32 n = 0;
-            Int32 m = 1;
-            if (block[offset + p] == '-')
-            {
-                m = -1;
-                p++;
-            }
-            if ((p == count) || (block[offset + p] < '0') || (block[offset + p] > '7')) return false;
-            while ((p < count) && (block[offset + p] >= '0') && (block[offset + p] < '8'))
-            {
-                n *= 8;
-                n += block[offset + p++] - '0';
-            }
-            while ((p < count) && (block[offset + p] == ' ')) p++;
-            if ((p < count) && (block[offset + p] == 0)) p++;
-            if (p != count) return false;
-            offset += p;
-            value = m * n;
-            return true;
         }
     }
 }

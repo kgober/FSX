@@ -467,6 +467,48 @@ namespace FSX
         }
     }
 
+    partial class RT11
+    {
+        private static Boolean IsChecksumOK(Block block, Int32 checksumOffset)
+        {
+            Int32 sum = 0;
+            for (Int32 p = 0; p < checksumOffset; p += 2) sum += block.GetUInt16L(p);
+            Int32 n = block.GetUInt16L(checksumOffset);
+            Debug.WriteLine(2, "Block checksum @{0:D0} {1}: {2:x4} {3}= {4:x4}", checksumOffset, ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
+            return ((sum != 0) && ((sum % 65536) == n));
+        }
+
+        private static Boolean IsASCIIText(Block block, Int32 offset, Int32 count)
+        {
+            for (Int32 i = 0; i < count; i++)
+            {
+                Byte b = block[offset + i];
+                if ((b < 32) || (b >= 127)) return false;
+            }
+            return true;
+        }
+
+        // convert an RT-11 wildcard pattern to a Regex
+        private static Regex Regex(String pattern)
+        {
+            String p = pattern.ToUpperInvariant();
+            String np = p;
+            String ep = "*";
+            Int32 i = p.IndexOf('.');
+            if (i != -1)
+            {
+                np = p.Substring(0, i);
+                if (np.Length == 0) np = "*";
+                ep = p.Substring(i + 1);
+            }
+            np = np.Replace("%", "[^ ]").Replace("*", @".*");
+            ep = ep.Replace("%", "[^ ]").Replace("*", @".*");
+            p = String.Concat("^", np, @" *\.", ep, " *$");
+            Debug.WriteLine(2, "Regex: {0} => {1}", pattern, p);
+            return new Regex(p);
+        }
+    }
+
     partial class RT11 : IFileSystemAuto
     {
         public static TestDelegate GetTest()
@@ -633,48 +675,6 @@ namespace FSX
             if (level == 6) return true;
 
             return false;
-        }
-    }
-
-    partial class RT11
-    {
-        private static Boolean IsChecksumOK(Block block, Int32 checksumOffset)
-        {
-            Int32 sum = 0;
-            for (Int32 p = 0; p < checksumOffset; p += 2) sum += block.GetUInt16L(p);
-            Int32 n = block.GetUInt16L(checksumOffset);
-            Debug.WriteLine(2, "Block checksum @{0:D0} {1}: {2:x4} {3}= {4:x4}", checksumOffset, ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
-            return ((sum != 0) && ((sum % 65536) == n));
-        }
-
-        private static Boolean IsASCIIText(Block block, Int32 offset, Int32 count)
-        {
-            for (Int32 i = 0; i < count; i++)
-            {
-                Byte b = block[offset + i];
-                if ((b < 32) || (b >= 127)) return false;
-            }
-            return true;
-        }
-
-        // convert an RT-11 wildcard pattern to a Regex
-        private static Regex Regex(String pattern)
-        {
-            String p = pattern.ToUpperInvariant();
-            String np = p;
-            String ep = "*";
-            Int32 i = p.IndexOf('.');
-            if (i != -1)
-            {
-                np = p.Substring(0, i);
-                if (np.Length == 0) np = "*";
-                ep = p.Substring(i + 1);
-            }
-            np = np.Replace("%", "[^ ]").Replace("*", @".*");
-            ep = ep.Replace("%", "[^ ]").Replace("*", @".*");
-            p = String.Concat("^", np, @" *\.", ep, " *$");
-            Debug.WriteLine(2, "Regex: {0} => {1}", pattern, p);
-            return new Regex(p);
         }
     }
 }

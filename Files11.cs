@@ -734,6 +734,123 @@ namespace FSX
         }
     }
 
+    partial class ODS1
+    {
+        private static Boolean IsChecksumOK(Block block, Int32 checksumOffset)
+        {
+            Int32 sum = 0;
+            for (Int32 p = 0; p < checksumOffset; p += 2) sum += block.GetUInt16L(p);
+            Int32 n = block.GetUInt16L(checksumOffset);
+            Debug.WriteLine(2, "Block checksum @{0:D0} {1}: {2:x4} {3}= {4:x4}", checksumOffset, ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
+            return ((sum != 0) && ((sum % 65536) == n));
+        }
+
+        private static Block GetFileHeader(Volume volume, UInt16 fileNum)
+        {
+            if (fileNum == 0) return null;
+            Block HB = volume[1]; // home block
+            if (fileNum > HB.GetUInt16L(6)) return null; // fileNum exceeds H.FMAX
+            // first 16 file headers follow index bitmap (at volume LBN H.IBLB + H.IBSZ)
+            if (fileNum <= 16) return volume[(HB.GetUInt16L(2) << 16) + HB.GetUInt16L(4) + HB.GetUInt16L(0) + fileNum - 1];
+            // file headers 17+ are at index file VBN H.IBSZ + 19
+            return GetFileBlock(volume, 1, HB.GetUInt16L(0) + 2 + fileNum);
+        }
+
+        private static Block GetFileBlock(Volume volume, UInt16 fileNum, Int32 vbn)
+        {
+            // get file header
+            Block H = GetFileHeader(volume, fileNum);
+            while (H != null)
+            {
+                Int32 map = H[1] * 2; // map area pointer
+                Int32 CTSZ = H[map + 6];
+                Int32 LBSZ = H[map + 7];
+                Int32 p = map + 10; // start of retrieval pointers
+                Int32 q = p + H[map + 8] * 2; // end of retrieval pointers
+
+                // identify location of block in file map
+                Int32 ct;
+                Int32 lbn;
+                while (p < q)
+                {
+                    if ((CTSZ == 1) && (LBSZ == 3)) // Format 1 (normal format)
+                    {
+                        lbn = H[p++] << 16;
+                        ct = H[p++];
+                        lbn += H.GetUInt16L(ref p);
+                    }
+                    else if ((CTSZ == 2) && (LBSZ == 2)) // Format 2 (not implemented)
+                    {
+                        ct = H.GetUInt16L(ref p);
+                        lbn = H.GetUInt16L(ref p);
+                    }
+                    else if ((CTSZ == 2) && (LBSZ == 4)) // Format3 (not implemented)
+                    {
+                        ct = H.GetUInt16L(ref p);
+                        lbn = H.GetUInt16L(ref p) << 16;
+                        lbn += H.GetUInt16L(ref p);
+                    }
+                    else // unknown format
+                    {
+                        throw new InvalidDataException();
+                    }
+                    ct++;
+                    if (vbn <= ct) return volume[lbn + vbn - 1];
+                    vbn -= ct;
+                }
+
+                // if block wasn't found in this header, fetch next extension header
+                H = GetFileHeader(volume, H.GetUInt16L(map + 2));
+            }
+            return null;
+        }
+
+        private static Boolean IsASCIIText(Block block, Int32 offset, Int32 count)
+        {
+            for (Int32 i = 0; i < count; i++)
+            {
+                Byte b = block[offset + i];
+                if ((b < 32) || (b >= 127)) return false;
+            }
+            return true;
+        }
+
+        private static Boolean IsDigit(Char value, Int32 minDigit, Int32 maxDigit)
+        {
+            Int32 n = value - '0';
+            if ((n < minDigit) || (n > maxDigit)) return false;
+            return true;
+        }
+
+        // convert an ODS-1 wildcard pattern to a Regex
+        private static Regex Regex(String pattern)
+        {
+            String p = pattern.ToUpperInvariant();
+            String vp = "*";
+            Int32 i = p.IndexOf(';');
+            if (i != -1)
+            {
+                vp = p.Substring(i + 1);
+                p = p.Substring(0, i);
+            }
+            String np = p;
+            String ep = "*";
+            i = p.IndexOf('.');
+            if (i != -1)
+            {
+                np = p.Substring(0, i);
+                if (np.Length == 0) np = "*";
+                ep = p.Substring(i + 1);
+            }
+            np = np.Replace("?", "[^ ]").Replace("*", @".*");
+            ep = ep.Replace("?", "[^ ]").Replace("*", @".*");
+            vp = vp.Replace("*", @".*");
+            p = String.Concat("^", np, @" *\.", ep, " *;", vp, "$");
+            Debug.WriteLine(2, "Regex: {0} => {1}", pattern, p);
+            return new Regex(p);
+        }
+    }
+
     partial class ODS1 : IFileSystemAuto
     {
         public static TestDelegate GetTest()
@@ -929,123 +1046,6 @@ namespace FSX
             if (level == 6) return true;
 
             return false;
-        }
-    }
-
-    partial class ODS1
-    {
-        private static Boolean IsChecksumOK(Block block, Int32 checksumOffset)
-        {
-            Int32 sum = 0;
-            for (Int32 p = 0; p < checksumOffset; p += 2) sum += block.GetUInt16L(p);
-            Int32 n = block.GetUInt16L(checksumOffset);
-            Debug.WriteLine(2, "Block checksum @{0:D0} {1}: {2:x4} {3}= {4:x4}", checksumOffset, ((sum != 0) && ((sum % 65536) == n)) ? "PASS" : "FAIL", sum % 65536, ((sum % 65536) == n) ? '=' : '!', n);
-            return ((sum != 0) && ((sum % 65536) == n));
-        }
-
-        private static Block GetFileHeader(Volume volume, UInt16 fileNum)
-        {
-            if (fileNum == 0) return null;
-            Block HB = volume[1]; // home block
-            if (fileNum > HB.GetUInt16L(6)) return null; // fileNum exceeds H.FMAX
-            // first 16 file headers follow index bitmap (at volume LBN H.IBLB + H.IBSZ)
-            if (fileNum <= 16) return volume[(HB.GetUInt16L(2) << 16) + HB.GetUInt16L(4) + HB.GetUInt16L(0) + fileNum - 1];
-            // file headers 17+ are at index file VBN H.IBSZ + 19
-            return GetFileBlock(volume, 1, HB.GetUInt16L(0) + 2 + fileNum);
-        }
-
-        private static Block GetFileBlock(Volume volume, UInt16 fileNum, Int32 vbn)
-        {
-            // get file header
-            Block H = GetFileHeader(volume, fileNum);
-            while (H != null)
-            {
-                Int32 map = H[1] * 2; // map area pointer
-                Int32 CTSZ = H[map + 6];
-                Int32 LBSZ = H[map + 7];
-                Int32 p = map + 10; // start of retrieval pointers
-                Int32 q = p + H[map + 8] * 2; // end of retrieval pointers
-
-                // identify location of block in file map
-                Int32 ct;
-                Int32 lbn;
-                while (p < q)
-                {
-                    if ((CTSZ == 1) && (LBSZ == 3)) // Format 1 (normal format)
-                    {
-                        lbn = H[p++] << 16;
-                        ct = H[p++];
-                        lbn += H.GetUInt16L(ref p);
-                    }
-                    else if ((CTSZ == 2) && (LBSZ == 2)) // Format 2 (not implemented)
-                    {
-                        ct = H.GetUInt16L(ref p);
-                        lbn = H.GetUInt16L(ref p);
-                    }
-                    else if ((CTSZ == 2) && (LBSZ == 4)) // Format3 (not implemented)
-                    {
-                        ct = H.GetUInt16L(ref p);
-                        lbn = H.GetUInt16L(ref p) << 16;
-                        lbn += H.GetUInt16L(ref p);
-                    }
-                    else // unknown format
-                    {
-                        throw new InvalidDataException();
-                    }
-                    ct++;
-                    if (vbn <= ct) return volume[lbn + vbn - 1];
-                    vbn -= ct;
-                }
-
-                // if block wasn't found in this header, fetch next extension header
-                H = GetFileHeader(volume, H.GetUInt16L(map + 2));
-            }
-            return null;
-        }
-
-        private static Boolean IsASCIIText(Block block, Int32 offset, Int32 count)
-        {
-            for (Int32 i = 0; i < count; i++)
-            {
-                Byte b = block[offset + i];
-                if ((b < 32) || (b >= 127)) return false;
-            }
-            return true;
-        }
-
-        private static Boolean IsDigit(Char value, Int32 minDigit, Int32 maxDigit)
-        {
-            Int32 n = value - '0';
-            if ((n < minDigit) || (n > maxDigit)) return false;
-            return true;
-        }
-
-        // convert an ODS-1 wildcard pattern to a Regex
-        private static Regex Regex(String pattern)
-        {
-            String p = pattern.ToUpperInvariant();
-            String vp = "*";
-            Int32 i = p.IndexOf(';');
-            if (i != -1)
-            {
-                vp = p.Substring(i + 1);
-                p = p.Substring(0, i);
-            }
-            String np = p;
-            String ep = "*";
-            i = p.IndexOf('.');
-            if (i != -1)
-            {
-                np = p.Substring(0, i);
-                if (np.Length == 0) np = "*";
-                ep = p.Substring(i + 1);
-            }
-            np = np.Replace("?", "[^ ]").Replace("*", @".*");
-            ep = ep.Replace("?", "[^ ]").Replace("*", @".*");
-            vp = vp.Replace("*", @".*");
-            p = String.Concat("^", np, @" *\.", ep, " *;", vp, "$");
-            Debug.WriteLine(2, "Regex: {0} => {1}", pattern, p);
-            return new Regex(p);
         }
     }
 }

@@ -155,6 +155,7 @@ namespace FSX
         }
     }
 
+
     // Debug class - utility functions to handle debug output
 
     class Debug

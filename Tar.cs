@@ -21,38 +21,48 @@
 
 
 // tar file format references:
-// v7 / 2.11BSD source code
-// pdtar (comp.sources.unix Volume 12, Issues 68-70)
-// POSIX 1003
-// https://www.gnu.org/software/tar/manual/html_node/Standard.html
-
+//   v7 / 2.11BSD source code
+//   pdtar (comp.sources.unix Volume 12, Issues 68-70)
+//   POSIX 1003
+//   https://www.gnu.org/software/tar/manual/html_node/Standard.html
+//
 // Unix v7 tar file header format:
-//   0 name (null-terminated null-padded string) - file name
-// 100 mode ("%6o \0") - 12-bit file mode
-// 108 uid  ("%6o \0") - 16-bit user id
-// 116 gid  ("%6o \0") - 16-bit group id
-// 124 size ("%11lo ") - 32-bit file size
-// 136 mtime ("%11lo ") - 32-bit modification time (seconds since epoch)
-// 148 checksum ("%6o\0 ") - 16-bit sum of all header bytes (with checksum bytes filled with spaces)
-// 156 link flag ('1' if set, '\0' otherwise) - indicates whether file is hard-linked to a previous file in archive
-// 157 link name (null-terminated null-padded string) - the name of the file this entry is a link to
-// 257 (end of header)
-// 512 (end of block)
-
+//     0 name (null-terminated null-padded string) - file name
+//   100 mode ("%6o \0") - 12-bit file mode
+//   108 uid  ("%6o \0") - 16-bit user id
+//   116 gid  ("%6o \0") - 16-bit group id
+//   124 size ("%11lo ") - 32-bit file size
+//   136 mtime ("%11lo ") - 32-bit modification time (seconds since epoch)
+//   148 checksum ("%6o\0 ") - 16-bit sum of all header bytes (with checksum bytes filled with spaces)
+//   156 link flag ('1' if set, '\0' otherwise) - indicates whether file is hard-linked to a previous file in archive
+//   157 link name (null-terminated null-padded string) - the name of the file this entry is a link to
+//   257 (end of header)
+//   512 (end of block)
+//
 // BSD tar file header format adds:
-// link flag = '2' and size = 0 for symbolic links
-// archives may include entries for directories (names end with '/', size = 0)
-
+//   link flag = '2' and size = 0 for symbolic links
+//   archives may include entries for directories (names end with '/', size = 0)
+//
 // pdtar (ustar) file header format adds:
-// link flag values '3' through '7', and '0' for '\0'
-// 257 magic (null-terminated null-padded string) "ustar  \0"
-// 265 uname (null-terminated null-padded string)
-// 297 gname (null-terminated null-padded string)
-// 329 major (octal)
-// 337 minor (octal)
-// 345 (end of header)
+//   link flag values '3' through '7', and '0' for '\0'
+//   257 magic (null-terminated null-padded string) "ustar  \0"
+//   265 uname (null-terminated null-padded string)
+//   297 gname (null-terminated null-padded string)
+//   329 major (octal)
+//   337 minor (octal)
+//   345 (end of header)
+//
+// gnu and posix add:
+//   checksum format "%6o \0"
+//   magic "ustar\0"+"vv" (vv=version)
+//   additional flag values
 
-// gnu and posix add more fields at offset 345, additional flag values, and magic "ustar\0"+"vv" (vv=version)
+
+// Future Improvements / To Do
+// implement ChangeDir
+// support fileSpec in ListDir
+// support wildcards in FullName fileSpec
+// implement SaveFS
 
 
 using System;
@@ -63,9 +73,9 @@ namespace FSX
 {
     partial class Tar : FileSystem
     {
-        protected Volume mVol;
-        protected String mType;
-        protected String mDir;
+        private Volume mVol;
+        private String mType;
+        private String mDir;
 
         public Tar(Volume volume)
         {
@@ -171,20 +181,81 @@ namespace FSX
 
         public override void ListFile(String fileSpec, Encoding encoding, TextWriter output)
         {
+            String name = FullName(fileSpec);
+            if (name == null) return;
+            String buf = encoding.GetString(ReadFile(name));
+            Int32 p = 0;
+            for (Int32 i = 0; i < buf.Length; i++)
+            {
+                if (buf[i] != '\n') continue;
+                output.WriteLine(buf.Substring(p, i - p));
+                p = i + 1;
+            }
         }
 
         public override void DumpFile(String fileSpec, TextWriter output)
         {
+            String name = FullName(fileSpec);
+            if (name == null) return;
+            Program.Dump(null, ReadFile(name), output, 16, 512, Program.DumpOptions.ASCII);
         }
 
         public override String FullName(String fileSpec)
         {
-            throw new NotImplementedException();
+            Int32 zbc = 0;
+            Int32 lbn = 0;
+            while (lbn < mVol.BlockCount)
+            {
+                Block B = mVol[lbn++];
+                if (B[0] == 0)
+                {
+                    if (++zbc == 2) break;
+                    continue;
+                }
+                zbc = 0;
+                String name = B.GetCString(0, 100, Encoding.ASCII);
+                if (String.Compare(name, fileSpec, StringComparison.Ordinal) != 0) continue;
+                Byte flag = B.GetByte(156);
+                String lname = B.GetCString(157, 100, Encoding.ASCII);
+                if ((flag == 0) || (flag == (Byte)'0')) return name;
+                if (flag == '1') return FullName(lname);
+            }
+            return null;
         }
 
         public override Byte[] ReadFile(String fileSpec)
         {
-            throw new NotImplementedException();
+            Int32 zbc = 0;
+            Int32 lbn = 0;
+            while (lbn < mVol.BlockCount)
+            {
+                Block B = mVol[lbn++];
+                if (B[0] == 0)
+                {
+                    if (++zbc == 2) break;
+                    continue;
+                }
+                zbc = 0;
+                String name = B.GetCString(0, 100, Encoding.ASCII);
+                if (String.Compare(name, fileSpec, StringComparison.Ordinal) != 0) continue;
+                Byte flag = B.GetByte(156);
+                if ((flag != 0) && (flag != (Byte)'0')) continue;
+                Int32 size;
+                ParseOctal(B, 124, 12, out size);
+                Byte[] buf = new Byte[size];
+                Int32 p = 0;
+                while (size > 0)
+                {
+                    B = mVol[lbn++];
+                    Int32 n = B.Size;
+                    if (n > size) n = size;
+                    B.CopyTo(buf, p, 0, n);
+                    p += n;
+                    size -= n;
+                }
+                return buf;
+            }
+            return null;
         }
 
         public override Boolean SaveFS(String fileName, String format)
@@ -196,13 +267,13 @@ namespace FSX
     partial class Tar
     {
         // parse bytes representing a printable octal value
-        protected static Boolean ParseOctal(Block block, Int32 offset, Int32 count, out Int32 value)
+        private static Boolean ParseOctal(Block block, Int32 offset, Int32 count, out Int32 value)
         {
             Int32 i = offset;
             return ParseOctal(block, ref i, count, out value);
         }
 
-        protected static Boolean ParseOctal(Block block, ref Int32 offset, Int32 count, out Int32 value)
+        private static Boolean ParseOctal(Block block, ref Int32 offset, Int32 count, out Int32 value)
         {
             value = -1;
             if (block.Size - offset < count) return false;
@@ -268,11 +339,7 @@ namespace FSX
                 Int32 bp = 0;
                 if (B[bp] == 0)
                 {
-                    if (++zbc == 2)
-                    {
-                        if (lbn < volume.BlockCount) Debug.WriteLine(1, "Tar.Test: logical EOF before physical EOF (at file offset {0:D0})", lbn * B.Size);
-                        break;
-                    }
+                    if (++zbc == 2) break;
                     continue;
                 }
                 zbc = 0;
@@ -289,7 +356,7 @@ namespace FSX
                 if (!ParseOctal(B, ref bp, 8, out uid)) return Debug.WriteLine(false, 1, "Tar.Test: file {0} uid not valid (at file offset {1:D0})", name, (lbn - 1) * B.Size + bp);
                 if (!ParseOctal(B, ref bp, 8, out gid)) return Debug.WriteLine(false, 1, "Tar.Test: file {0} gid not valid (at file offset {1:D0})", name, (lbn - 1) * B.Size + bp);
                 if (!ParseOctal(B, ref bp, 12, out len)) return Debug.WriteLine(false, 1, "Tar.Test: file {0} size not valid (at file offset {1:D0})", name, (lbn - 1) * B.Size + bp);
-                if (!ParseOctal(B, ref bp, 12, out mtime)) return Debug.WriteLine(false, 1, "Tar.Test: file {0} mtime not valid (at file offset {1:D0})", name, (lbn - 1) * B.Size);
+                if (!ParseOctal(B, ref bp, 12, out mtime)) return Debug.WriteLine(false, 1, "Tar.Test: file {0} mtime not valid (at file offset {1:D0})", name, (lbn - 1) * B.Size + bp);
                 bp += 8;
                 Byte flag = B.GetByte(ref bp);
                 String lname = B.GetCString(bp, 100, Encoding.ASCII);
@@ -298,23 +365,22 @@ namespace FSX
                 n = (magic == "ustar  ") ? 1 : (magic == "ustar") ? 2 : 0;
                 String ver = (n == 2) ? B.GetString(bp + 6, 2, Encoding.ASCII) : null;
                 bp += 8;
-                switch (n)
+                if (B.GetByte(155) != ((n == 2) ? 0 : 32)) return Debug.WriteLine(false, 1, "Tar.Test: file {0} checksum missing trailing {1} (at file offset {2:D0})", name, (n == 2) ? "null" : "blank", (lbn - 1) * B.Size + 155);
+                if (n == 0)
                 {
-                    case 0:
-                        if (magic.Length != 0) return Debug.WriteLine(false, 1, "Tar.Test: file {0} unrecognized magic {1}", name, magic);
-                        if ((flag != 0) && (flag != '1') && (flag != '2')) return Debug.WriteLine(false, 1, "Tar.Test: file {0} link flag not valid (expect 0x00, 0x31, or 0x32, is 0x{1:X2})", name, flag);
-                        break;
-                    case 1:
-                    case 2:
-                        if ((flag != 0) && ((flag < '0') || (flag > '7'))) return Debug.WriteLine(false, 1, "Tar.Test: file {0} link flag not valid (expect '\0', or '0'-'7', is 0x{1:X2})", name, flag);
-                        bp += 64; // skip uname, gname
-                        if ((flag == '3') || (flag == '4'))
-                        {
-                            Int32 major, minor;
-                            if (!ParseOctal(B, ref bp, 8, out major)) return Debug.WriteLine(false, 1, "Tar.Test: file {0} major not valid (at file offset {1:D0})", name, (lbn - 1) * B.Size + bp);
-                            if (!ParseOctal(B, ref bp, 8, out minor)) return Debug.WriteLine(false, 1, "Tar.Test: file {0} minor not valid (at file offset {1:D0})", name, (lbn - 1) * B.Size + bp);
-                        }
-                        break;
+                    if (magic.Length != 0) return Debug.WriteLine(false, 1, "Tar.Test: file {0} unrecognized magic {1}", name, magic);
+                    if ((flag != 0) && (flag != '1') && (flag != '2')) return Debug.WriteLine(false, 1, "Tar.Test: file {0} link flag not valid (expect 0x00, 0x31, or 0x32, is 0x{1:X2})", name, flag);
+                }
+                else
+                {
+                    if ((flag != 0) && ((flag < '0') || (flag > '7'))) return Debug.WriteLine(false, 1, "Tar.Test: file {0} link flag not valid (expect '\0', or '0'-'7', is 0x{1:X2})", name, flag);
+                    bp += 64; // skip uname, gname
+                    if ((flag == '3') || (flag == '4'))
+                    {
+                        Int32 major, minor;
+                        if (!ParseOctal(B, ref bp, 8, out major)) return Debug.WriteLine(false, 1, "Tar.Test: file {0} major not valid (at file offset {1:D0})", name, (lbn - 1) * B.Size + bp);
+                        if (!ParseOctal(B, ref bp, 8, out minor)) return Debug.WriteLine(false, 1, "Tar.Test: file {0} minor not valid (at file offset {1:D0})", name, (lbn - 1) * B.Size + bp);
+                    }
                 }
                 if (name.EndsWith("/")) len = 0;
                 if (flag == '0') flag = 0;
@@ -362,8 +428,7 @@ namespace FSX
                 bp += 24; // skip mode, uid, gid
                 Int32 len;
                 ParseOctal(B, ref bp, 12, out len);
-                bp += 19; // skip mtime, checksum
-                if (B.GetByte(ref bp) != ' ') return Debug.WriteLine(false, 1, "Tar.Test: file {0} checksum missing trailing blank (at file offset {1:D0})", name, (lbn - 1) * B.Size + bp - 1);
+                bp += 20; // skip mtime, checksum
                 Byte flag = B.GetByte(ref bp);
                 String lname = B.GetCString(bp, 100, Encoding.ASCII);
                 for (Int32 i = lname.Length; i < 100; i++)

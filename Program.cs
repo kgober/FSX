@@ -538,45 +538,29 @@ namespace FSX
             //    }
             //    // TODO: add actual ISO9660 image file support
             //}
-            if (path.EndsWith(".d64", StringComparison.OrdinalIgnoreCase))
+            if ((path.EndsWith(".d64", StringComparison.OrdinalIgnoreCase)) && (D64.IsValid(data)))
             {
-                CHSVolume d = Commodore.LoadD64(s, data);
-                if (d != null)
-                {
-                    Int32 size;
-                    Type type;
-                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
-                }
+                // .D64 image file
+                CHSVolume image = D64.Load(s, data);
+                return LoadFS(s, image);
             }
-            if (path.EndsWith(".d67", StringComparison.OrdinalIgnoreCase))
+            if ((path.EndsWith(".d67", StringComparison.OrdinalIgnoreCase)) && (D67.IsValid(data)))
             {
-                CHSVolume d = Commodore.LoadD64(s, data);
-                if (d != null)
-                {
-                    Int32 size;
-                    Type type;
-                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
-                }
+                // .D67 image file
+                CHSVolume image = D67.Load(s, data);
+                return LoadFS(s, image);
             }
-            if (path.EndsWith(".d80", StringComparison.OrdinalIgnoreCase))
+            if ((path.EndsWith(".d80", StringComparison.OrdinalIgnoreCase)) && (D80.IsValid(data)))
             {
-                CHSVolume d = Commodore.LoadD80(s, data);
-                if (d != null)
-                {
-                    Int32 size;
-                    Type type;
-                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
-                }
+                // .D80 image file
+                CHSVolume image = D80.Load(s, data);
+                return LoadFS(s, image);
             }
-            if (path.EndsWith(".d82", StringComparison.OrdinalIgnoreCase))
+            if ((path.EndsWith(".d82", StringComparison.OrdinalIgnoreCase)) && (D82.IsValid(data)))
             {
-                CHSVolume d = Commodore.LoadD82(s, data);
-                if (d != null)
-                {
-                    Int32 size;
-                    Type type;
-                    if (CBMDOS.Test(d, 6, out size, out type)) return new CBMDOS(d);
-                }
+                // .D82 image file
+                CHSVolume image = D82.Load(s, data);
+                return LoadFS(s, image);
             }
 
             // try to identify storage format based on image data
@@ -591,7 +575,7 @@ namespace FSX
             // try to identify storage format based on image data size
             if (data.Length == 174848) // 35 tracks, 683 blocks (Commodore 1541/4040)
             {
-                CHSVolume d = Commodore.LoadD64(source, data);
+                CHSVolume d = D64.Load(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -602,7 +586,7 @@ namespace FSX
             }
             if (data.Length == 175531) // 35 tracks, 683 blocks, with error bytes (Commodore 1541)
             {
-                CHSVolume d = Commodore.LoadD64(source, data);
+                CHSVolume d = D64.Load(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -613,7 +597,7 @@ namespace FSX
             }
             if (data.Length == 176640) // 35 tracks, 690 blocks (Commodore 2040)
             {
-                CHSVolume d = Commodore.LoadD64(source, data);
+                CHSVolume d = D64.Load(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -624,7 +608,7 @@ namespace FSX
             }
             if (data.Length == 196608) // 40 tracks, 768 blocks (Commodore 1541)
             {
-                CHSVolume d = Commodore.LoadD64(source, data);
+                CHSVolume d = D64.Load(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -635,7 +619,7 @@ namespace FSX
             }
             if (data.Length == 197376) // 40 tracks, 768 blocks, with error bytes (Commodore 1541)
             {
-                CHSVolume d = Commodore.LoadD64(source, data);
+                CHSVolume d = D64.Load(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -646,7 +630,7 @@ namespace FSX
             }
             if (data.Length == 205312) // 42 tracks, 802 blocks (Commodore 1541)
             {
-                CHSVolume d = Commodore.LoadD64(source, data);
+                CHSVolume d = D64.Load(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -657,7 +641,7 @@ namespace FSX
             }
             if (data.Length == 206114) // 42 tracks, 802 blocks, with error bytes (Commodore 1541)
             {
-                CHSVolume d = Commodore.LoadD64(source, data);
+                CHSVolume d = D64.Load(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -708,7 +692,7 @@ namespace FSX
             }
             else if (data.Length == 533248) // 77 tracks, 2083 blocks (Commodore 8050)
             {
-                CHSVolume d = Commodore.LoadD80(source, data);
+                CHSVolume d = D80.Load(source, data);
                 if (d != null)
                 {
                     Int32 size;
@@ -719,7 +703,7 @@ namespace FSX
             }
             else if (data.Length == 1066496) // 154 tracks, 4166 blocks (Commodore 8250)
             {
-                CHSVolume d = Commodore.LoadD82(source, data);
+                CHSVolume d = D82.Load(source, data);
                 if (d != null)
                 {
                     Int32 size;

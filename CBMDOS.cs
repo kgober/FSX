@@ -517,7 +517,7 @@ namespace FSX
                     if (n > (size - sc)) return Debug.WriteLine(false, 1, "CBMDOS.Test: invalid block count in directory entry {0:D0}/{1:D0} 0x{2:x2} (is {3:D0}, expect n <= {4:D0})", t, s, bp, n, size - sc);
                     Int32 ft = B[bp + 1]; // track of first block
                     Int32 fs = B[bp + 2]; // sector of first block
-                    Int32 ct= 0; // count of sectors in this file
+                    Int32 ct = 0; // count of sectors in this file
                     while (ft != 0)
                     {
                         ct++;

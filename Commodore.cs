@@ -160,7 +160,6 @@ namespace FSX
         }
     }
 
-
     // PETSCII text character set (lower case and upper case)
     class PETSCII1 : PETSCII0
     {
@@ -194,125 +193,144 @@ namespace FSX
     }
 
 
-    class Commodore
+    // .D64 image file format (Commodore 4040/1540/1541)
+    // (also recognizes .D67 files, in case they're misnamed)
+    class D64
     {
-        // load .D64/.D67 image file
-        public static CHSVolume LoadD64(String source, Byte[] data)
+        public static Boolean IsValid(Byte[] data)
         {
-            CHSVolume d = null;
+            if (data.Length == 174848) return true; // standard format
+            if (data.Length == 175531) return true; // with error bytes
+            if (data.Length == 196608) return true; // 40 tracks
+            if (data.Length == 197376) return true; // 40 tracks with error bytes
+            if (data.Length == 205312) return true; // 42 tracks
+            if (data.Length == 206114) return true; // 42 tracks with error bytes
+            if (data.Length == 176640) return true; // .D67 format
+            if (data.Length == 177330) return true; // .D67 format with error bytes
+            return false;
+        }
+
+        public static CHSVolume Load(String source, Byte[] data)
+        {
+            if (!IsValid(data)) return null;
             Int32 z1 = 21, z2 = 19, z3 = 18, z4 = 17;
-            Int32 c = -1;
-            if (data.Length == 176640)
+            Int32 nt = 35;
+            if ((data.Length == 196608) || (data.Length == 197376)) nt = 40;
+            else if ((data.Length == 205312) || (data.Length == 206114)) nt = 42;
+            else if ((data.Length == 176640) || (data.Length == 177330)) z2 = 20;
+            CHSVolume V = new CHSVolume(source, source, 256, 1, nt, 0, 1, 0);
+            for (Int32 t = 1; t <= 17; t++) V[t, 0] = new Track(z1);
+            for (Int32 t = 18; t <= 24; t++) V[t, 0] = new Track(z2);
+            for (Int32 t = 25; t <= 30; t++) V[t, 0] = new Track(z3);
+            for (Int32 t = 31; t <= nt; t++) V[t, 0] = new Track(z4);
+            Int32 p = 0;
+            Int32 q = (data.Length == V.BlockCount * 257) ? V.BlockCount * 256 : -1;
+            for (Int32 t = 1; t <= nt; t++)
             {
-                c = 35;
-                z2 = 20;
-            }
-            else if ((data.Length == 174848) || (data.Length == 175531)) c = 35;
-            else if ((data.Length == 196608) || (data.Length == 197376)) c = 40;
-            else if ((data.Length == 205312) || (data.Length == 206114)) c = 42;
-            if (c != -1)
-            {
-                d = new CHSVolume(source, source, 256, 1, c, 0, 1, 0);
-                for (Int32 t = 1; t <= 17; t++) d[t, 0] = new Track(z1);
-                for (Int32 t = 18; t <= 24; t++) d[t, 0] = new Track(z2);
-                for (Int32 t = 25; t <= 30; t++) d[t, 0] = new Track(z3);
-                for (Int32 t = 31; t <= c; t++) d[t, 0] = new Track(z4);
-            }
-            if (d != null)
-            {
-                Int32 p = 0;
-                Int32 q = -1;
-                if (data.Length == d.BlockCount * 257) q = d.BlockCount * 256;
-                for (Int32 t = 1; t <= c; t++)
+                Track T = V[t, 0];
+                for (Int32 s = 0; s < T.Length; s++)
                 {
-                    Track T = d[t, 0];
-                    for (Int32 s = 0; s < T.Length; s++)
-                    {
-                        Sector S = new Sector(s, 256, data, p);
-                        p += 256;
-                        if (q != -1) S.ErrorCode = data[q++];
-                        T[s] = S;
-                    }
+                    Sector S = new Sector(s, 256, data, p);
+                    p += 256;
+                    if (q != -1) S.ErrorCode = data[q++];
+                    T[s] = S;
                 }
-                return d;
             }
-            return null;
+            return V;
+        }
+    }
+
+    // .D67 image file format (Commodore 2040/3040 with DOS 1 ROMs)
+    class D67
+    {
+        public static Boolean IsValid(Byte[] data)
+        {
+            if (data.Length == 176640) return true; // standard format
+            if (data.Length == 177330) return true; // with error bytes
+            return false;
         }
 
-
-        // load .D80 image file
-        public static CHSVolume LoadD80(String source, Byte[] data)
+        public static CHSVolume Load(String source, Byte[] data)
         {
-            CHSVolume d = null;
-            Int32 c = -1;
-            if (data.Length == 533248) c = 77;
-            if (c != -1)
-            {
-                d = new CHSVolume(source, source, 256, 1, c, 0, 1, 0);
-                for (Int32 t = 1; t <= 39; t++) d[t, 0] = new Track(29);
-                for (Int32 t = 40; t <= 53; t++) d[t, 0] = new Track(27);
-                for (Int32 t = 54; t <= 64; t++) d[t, 0] = new Track(25);
-                for (Int32 t = 65; t <= c; t++) d[t, 0] = new Track(23);
-            }
-            if (d != null)
-            {
-                Int32 p = 0;
-                Int32 q = -1;
-                if (data.Length == d.BlockCount * 257) q = d.BlockCount * 256;
-                for (Int32 t = 1; t <= c; t++)
-                {
-                    Track T = d[t, 0];
-                    for (Int32 s = 0; s < T.Length; s++)
-                    {
-                        Sector S = new Sector(s, 256, data, p);
-                        p += 256;
-                        if (q != -1) S.ErrorCode = data[q++];
-                        T[s] = S;
-                    }
-                }
-                return d;
-            }
-            return null;
+            return D64.Load(source, data);
+        }
+    }
+
+    // .D80 image file format (Commodore 8050)
+    class D80
+    {
+        public static Boolean IsValid(Byte[] data)
+        {
+            if (data.Length == 533248) return true; // standard format
+            if (data.Length == 535331) return true; // with error bytes
+            return false;
         }
 
-
-        // load .D82 image file
-        public static CHSVolume LoadD82(String source, Byte[] data)
+        public static CHSVolume Load(String source, Byte[] data)
         {
-            CHSVolume d = null;
-            Int32 c = -1;
-            if (data.Length == 1066496) c = 154; // physically 77 with 2 sides
-            if (c != -1)
+            if (!IsValid(data)) return null;
+            Int32 z1 = 29, z2 = 27, z3 = 25, z4 = 23;
+            Int32 nt = 77;
+            CHSVolume V = new CHSVolume(source, source, 256, 1, nt, 0, 1, 0);
+            for (Int32 t = 1; t <= 39; t++) V[t, 0] = new Track(z1);
+            for (Int32 t = 40; t <= 53; t++) V[t, 0] = new Track(z2);
+            for (Int32 t = 54; t <= 64; t++) V[t, 0] = new Track(z3);
+            for (Int32 t = 65; t <= nt; t++) V[t, 0] = new Track(z4);
+            Int32 p = 0;
+            Int32 q = (data.Length == V.BlockCount * 257) ? V.BlockCount * 256 : -1;
+            for (Int32 t = 1; t <= nt; t++)
             {
-                d = new CHSVolume(source, source, 256, 1, c, 0, 1, 0);
-                for (Int32 t = 1; t <= 39; t++) d[t, 0] = new Track(29);
-                for (Int32 t = 40; t <= 53; t++) d[t, 0] = new Track(27);
-                for (Int32 t = 54; t <= 64; t++) d[t, 0] = new Track(25);
-                for (Int32 t = 65; t <= 77; t++) d[t, 0] = new Track(23);
-                for (Int32 t = 78; t <= 116; t++) d[t, 0] = new Track(29);
-                for (Int32 t = 117; t <= 130; t++) d[t, 0] = new Track(27);
-                for (Int32 t = 131; t <= 141; t++) d[t, 0] = new Track(25);
-                for (Int32 t = 142; t <= c; t++) d[t, 0] = new Track(23);
-            }
-            if (d != null)
-            {
-                Int32 p = 0;
-                Int32 q = -1;
-                if (data.Length == d.BlockCount * 257) q = d.BlockCount * 256;
-                for (Int32 t = 1; t <= c; t++)
+                Track T = V[t, 0];
+                for (Int32 s = 0; s < T.Length; s++)
                 {
-                    Track T = d[t, 0];
-                    for (Int32 s = 0; s < T.Length; s++)
-                    {
-                        Sector S = new Sector(s, 256, data, p);
-                        p += 256;
-                        if (q != -1) S.ErrorCode = data[q++];
-                        T[s] = S;
-                    }
+                    Sector S = new Sector(s, 256, data, p);
+                    p += 256;
+                    if (q != -1) S.ErrorCode = data[q++];
+                    T[s] = S;
                 }
-                return d;
             }
-            return null;
+            return V;
+        }
+    }
+
+    // .D82 image file format (Commodore 8250)
+    class D82
+    {
+        public static Boolean IsValid(Byte[] data)
+        {
+            if (data.Length == 1066496) return true; // standard format
+            if (data.Length == 1070662) return true; // with error bytes
+            return false;
+        }
+
+        public static CHSVolume Load(String source, Byte[] data)
+        {
+            if (!IsValid(data)) return null;
+            Int32 z1 = 29, z2 = 27, z3 = 25, z4 = 23;
+            Int32 nt = 154;
+            CHSVolume V = new CHSVolume(source, source, 256, 1, nt, 0, 1, 0);
+            for (Int32 t = 1; t <= 39; t++) V[t, 0] = new Track(z1);
+            for (Int32 t = 40; t <= 53; t++) V[t, 0] = new Track(z2);
+            for (Int32 t = 54; t <= 64; t++) V[t, 0] = new Track(z3);
+            for (Int32 t = 65; t <= 77; t++) V[t, 0] = new Track(z4);
+            for (Int32 t = 78; t <= 116; t++) V[t, 0] = new Track(z1);
+            for (Int32 t = 117; t <= 130; t++) V[t, 0] = new Track(z2);
+            for (Int32 t = 131; t <= 141; t++) V[t, 0] = new Track(z3);
+            for (Int32 t = 142; t <= nt; t++) V[t, 0] = new Track(z4);
+            Int32 p = 0;
+            Int32 q = (data.Length == V.BlockCount * 257) ? V.BlockCount * 256 : -1;
+            for (Int32 t = 1; t <= nt; t++)
+            {
+                Track T = V[t, 0];
+                for (Int32 s = 0; s < T.Length; s++)
+                {
+                    Sector S = new Sector(s, 256, data, p);
+                    p += 256;
+                    if (q != -1) S.ErrorCode = data[q++];
+                    T[s] = S;
+                }
+            }
+            return V;
         }
     }
 }

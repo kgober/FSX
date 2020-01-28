@@ -38,8 +38,8 @@
 //     when code size resets or changes, remaining code words in the current block are discarded.
 //
 // LZW compression/decompression algorithm:
-// https://marknelson.us/posts/1989/10/01/lzw-data-compression.html
-// https://marknelson.us/posts/2011/11/08/lzw-revisited.html
+//   https://marknelson.us/posts/1989/10/01/lzw-data-compression.html
+//   https://marknelson.us/posts/2011/11/08/lzw-revisited.html
 //
 // Example: compression of ABABCCC
 //   in             add     out     residual
@@ -72,23 +72,13 @@ namespace FSX
             if (data.Length < 3) return false;
             if (data[0] != 0x1f) return false;
             if (data[1] != 0x9d) return false;
-            if ((data[2] & 0x60) != 0) return false;
             return true;
         }
 
-        public static Byte[] Decompress(Byte[] data)
-        {
-            DateTime t1 = DateTime.Now;
-            Byte[] buf = new Decompressor(data).Decompress();
-            DateTime t2 = DateTime.Now;
-            TimeSpan td = t2 - t1;
-            Debug.WriteLine(9, "Compress.Decompress: {0:D0} -> {1:D0} bytes in {2:F3} ms", data.Length, (buf == null) ? 0 : buf.Length, td.TotalMilliseconds);
-            return (buf == null) ? data : buf;
-        }
-
-        private class Decompressor
+        public class Decompressor
         {
             private Byte[] mData;           // compressed data
+            private Int32 mSize;            // uncompressed size
             private Int32[] mLength;        // lengths of each dictionary entry
             private Int32[] mPrefixCode;    // prefix of each dictionary entry is another dictionary entry
             private Byte[] mSuffixByte;     // suffix of each dictionary entry is a byte to be appended to prefix
@@ -96,34 +86,28 @@ namespace FSX
             public Decompressor(Byte[] data)
             {
                 mData = data;
+                mSize = -2;
             }
 
-            public Byte[] Decompress()
+            public Int32 GetByteCount()
             {
-                if (!HasHeader(mData)) return null;
+                if (mSize != -2) return mSize;
+                if (!HasHeader(mData)) return (mSize = -1);
                 Int32 MAX_BITS = mData[2] & 0x1f;
-                if (MAX_BITS > 24) return null; // current BitReader only handles up to 24-bit code words
+                if (MAX_BITS > 24) return (mSize = -1); // current BitReader only handles up to 24-bit code words
+                if ((mData[2] & 0x60) != 0) return (mSize = -1); // unsupported flag bits
                 Boolean BLOCK_MODE = ((mData[2] & 0x80) != 0);
 
                 Int32 n = 1 << MAX_BITS;
                 mLength = new Int32[n];
-                mPrefixCode = new Int32[n];
-                mSuffixByte = new Byte[n];
-                for (Int32 i = 0; i < 256; i++)
-                {
-                    mLength[i] = 1;
-                    mPrefixCode[i] = -1;
-                    mSuffixByte[i] = (Byte)i;
-                }
-
-                // find the uncompressed size so we can allocate the decompressed byte array
+                for (Int32 i = 0; i < 256; i++) mLength[i] = 1;
                 Int32 block_offset = 3;
                 BitReader R = new BitReader(mData, block_offset);
                 Int32 code_size = 9;
                 Int32 code_max = (1 << code_size) - 1;
                 Int32 next_free = (BLOCK_MODE) ? 257 : 256;
                 Int32 code = R.Next(code_size);
-                if (code == -1) return new Byte[0];
+                if (code == -1) return (mSize = 0); // valid 0-byte output
                 n = 1; // first code is always for 1 byte, so start count at 1
                 Int32 prev_code = code;
                 while ((code = R.Next(code_size)) != -1)
@@ -136,8 +120,7 @@ namespace FSX
                         next_free = 256; // use 256 instead of 257 so next code isn't (usably) added to dictionary
                         continue;
                     }
-
-                    if (code > next_free) return null; // invalid or corrupt input
+                    if (code > next_free) return (mSize = -1); // invalid or corrupt input
                     if (next_free <= code_max)
                     {
                         // new dictionary entries are always 1 byte longer than the previously received one.
@@ -153,16 +136,36 @@ namespace FSX
                     n += mLength[code];
                     prev_code = code;
                 }
-                Byte[] buf = new Byte[n];
+                return (mSize = n);
+            }
 
-                // decompress into the allocated byte array
-                R = new BitReader(mData, block_offset = 3);
-                code_max = (1 << (code_size = 9)) - 1;
-                next_free = (BLOCK_MODE) ? 257 : 256;
-                code = R.Next(code_size);
+            public Byte[] GetBytes()
+            {
+                Int32 n = GetByteCount();
+                if (n == -1) return null;
+                Byte[] buf = new Byte[n];
+                if (n == 0) return buf;
+
+                Int32 MAX_BITS = mData[2] & 0x1f;
+                Boolean BLOCK_MODE = ((mData[2] & 0x80) != 0);
+                n = 1 << MAX_BITS;
+                mPrefixCode = new Int32[n];
+                mSuffixByte = new Byte[n];
+                for (Int32 i = 0; i < 256; i++)
+                {
+                    mPrefixCode[i] = -1;
+                    mSuffixByte[i] = (Byte)i;
+                }
+
+                Int32 block_offset = 3;
+                BitReader R = new BitReader(mData, block_offset);
+                Int32 code_size = 9;
+                Int32 code_max = (1 << code_size) - 1;
+                Int32 next_free = (BLOCK_MODE) ? 257 : 256;
+                Int32 code = R.Next(code_size);
                 n = 0;
                 Byte b = Put(buf, ref n, code); // first code gets output without adding anything to dictionary
-                prev_code = code;
+                Int32 prev_code = code;
                 while ((code = R.Next(code_size)) != -1)
                 {
                     if ((code == 256) && BLOCK_MODE)
@@ -173,7 +176,6 @@ namespace FSX
                         next_free = 256; // use 256 instead of 257 so next code isn't (usably) added to dictionary
                         continue;
                     }
-
                     if (code == next_free)
                     {
                         // special case: the last byte of this code is the same as the first byte of the previous code

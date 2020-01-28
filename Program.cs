@@ -511,14 +511,22 @@ namespace FSX
             if ((path.EndsWith(".Z", StringComparison.OrdinalIgnoreCase)) && (Compress.HasHeader(data)))
             {
                 // .Z compressed data
-                data = Compress.Decompress(data);
-                path = path.Substring(0, path.Length - 2);
+                Compress.Decompressor D = new Compress.Decompressor(data);
+                if (D.GetByteCount() != -1)
+                {
+                    data = D.GetBytes();
+                    path = path.Substring(0, path.Length - 2);
+                }
             }
             if ((path.EndsWith(".taz", StringComparison.OrdinalIgnoreCase)) && (Compress.HasHeader(data)))
             {
                 // .Z compressed tar file
-                data = Compress.Decompress(data);
-                path = String.Concat(path.Substring(0, path.Length - 3), "tar");
+                Compress.Decompressor D = new Compress.Decompressor(data);
+                if (D.GetByteCount() != -1)
+                {
+                    data = D.GetBytes();
+                    path = String.Concat(path.Substring(0, path.Length - 3), "tar");
+                }
             }
             if ((path.EndsWith(".imd", StringComparison.OrdinalIgnoreCase)) && (ImageDisk.HasHeader(data)))
             {

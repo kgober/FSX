@@ -59,6 +59,14 @@
 //   257    AB      258 = BA (B + AB[0])
 //   C      C       259 = ABC (AB + C[0])
 //   260    CC      260 = CC (C + C[0])
+//
+// Reference Implementations:
+//   net.sources 1984-07-05 Subject: File compression utility
+//   net.sources 1984-08-30 Subject: File compression program (compress) release 2.0
+//   mod.sources 1985-01-03 Subject: Compress release 3.0
+//   mod.sources 1985-08-01 Subject: Compress 4.0 (part [012] of 2)
+//   3.0 was also posted to comp.sources.unix volume1 as "compress"
+//   4.0 was also posted to comp.sources.unix volume2 as "compress4.0"
 
 
 using System;

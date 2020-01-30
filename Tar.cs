@@ -214,11 +214,13 @@ namespace FSX
                 }
                 zbc = 0;
                 String name = B.GetCString(0, 100, Encoding.ASCII);
-                if (String.Compare(name, fileSpec, StringComparison.Ordinal) != 0) continue;
+                Int32 size;
+                ParseOctal(B, 124, 12, out size);
                 Byte flag = B.GetByte(156);
-                String lname = B.GetCString(157, 100, Encoding.ASCII);
+                if ((size > 0) && (flag != '5') && (!name.EndsWith("/"))) lbn += (size + 511) / 512;
+                if (String.Compare(name, fileSpec, StringComparison.Ordinal) != 0) continue;
                 if ((flag == 0) || (flag == (Byte)'0')) return name;
-                if (flag == '1') return FullName(lname);
+                if (flag == '1') return FullName(B.GetCString(157, 100, Encoding.ASCII));
             }
             return null;
         }
@@ -237,11 +239,14 @@ namespace FSX
                 }
                 zbc = 0;
                 String name = B.GetCString(0, 100, Encoding.ASCII);
-                if (String.Compare(name, fileSpec, StringComparison.Ordinal) != 0) continue;
-                Byte flag = B.GetByte(156);
-                if ((flag != 0) && (flag != (Byte)'0')) continue;
                 Int32 size;
                 ParseOctal(B, 124, 12, out size);
+                Byte flag = B.GetByte(156);
+                if ((String.Compare(name, fileSpec, StringComparison.Ordinal) != 0) || ((flag != 0) && (flag != '0')))
+                {
+                    if ((size > 0) && (flag != '5') && (!name.EndsWith("/"))) lbn += (size + 511) / 512;
+                    continue;
+                }
                 Byte[] buf = new Byte[size];
                 Int32 p = 0;
                 while (size > 0)

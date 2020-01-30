@@ -51,58 +51,90 @@ namespace FSX
 
         static public Int16 GetInt16B(Byte[] buffer, Int32 offset)
         {
-            Byte[] buf = (BitConverter.IsLittleEndian) ? Reverse(buffer, offset, 2) : buffer;
-            return BitConverter.ToInt16(buf, offset);
+            if (BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, offset, 2);
+                offset = 0;
+            }
+            return BitConverter.ToInt16(buffer, offset);
         }
 
         static public Int16 GetInt16B(Byte[] buffer, ref Int32 offset)
         {
-            Byte[] buf = (BitConverter.IsLittleEndian) ? Reverse(buffer, offset, 2) : buffer;
-            Int16 n = BitConverter.ToInt16(buf, offset);
+            Int32 p = offset;
+            if (BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, p, 2);
+                p = 0;
+            }
             offset += 2;
-            return n;
+            return BitConverter.ToInt16(buffer, p);
         }
 
         static public Int16 GetInt16L(Byte[] buffer, Int32 offset)
         {
-            Byte[] buf = (BitConverter.IsLittleEndian) ? buffer : Reverse(buffer, offset, 2);
-            return BitConverter.ToInt16(buf, offset);
+            if (!BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, offset, 2);
+                offset = 0;
+            }
+            return BitConverter.ToInt16(buffer, offset);
         }
 
         static public Int16 GetInt16L(Byte[] buffer, ref Int32 offset)
         {
-            Byte[] buf = (BitConverter.IsLittleEndian) ? buffer : Reverse(buffer, offset, 2);
-            Int16 n = BitConverter.ToInt16(buf, offset);
+            Int32 p = offset;
+            if (!BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, p, 2);
+                p = 0;
+            }
             offset += 2;
-            return n;
+            return BitConverter.ToInt16(buffer, p);
         }
 
         static public UInt16 GetUInt16B(Byte[] buffer, Int32 offset)
         {
-            Byte[] buf = (BitConverter.IsLittleEndian) ? Reverse(buffer, offset, 2) : buffer;
-            return BitConverter.ToUInt16(buf, offset);
+            if (BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, offset, 2);
+                offset = 0;
+            }
+            return BitConverter.ToUInt16(buffer, offset);
         }
 
         static public UInt16 GetUInt16B(Byte[] buffer, ref Int32 offset)
         {
-            Byte[] buf = (BitConverter.IsLittleEndian) ? Reverse(buffer, offset, 2) : buffer;
-            UInt16 n = BitConverter.ToUInt16(buf, offset);
+            Int32 p = offset;
+            if (BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, p, 2);
+                p = 0;
+            }
             offset += 2;
-            return n;
+            return BitConverter.ToUInt16(buffer, p);
         }
 
         static public UInt16 GetUInt16L(Byte[] buffer, Int32 offset)
         {
-            Byte[] buf = (BitConverter.IsLittleEndian) ? buffer : Reverse(buffer, offset, 2);
-            return BitConverter.ToUInt16(buf, offset);
+            if (!BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, offset, 2);
+                offset = 0;
+            }
+            return BitConverter.ToUInt16(buffer, offset);
         }
 
         static public UInt16 GetUInt16L(Byte[] buffer, ref Int32 offset)
         {
-            Byte[] buf = (BitConverter.IsLittleEndian) ? buffer : Reverse(buffer, offset, 2);
-            UInt16 n = BitConverter.ToUInt16(buf, offset);
+            Int32 p = offset;
+            if (!BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, p, 2);
+                p = 0;
+            }
             offset += 2;
-            return n;
+            return BitConverter.ToUInt16(buffer, p);
         }
 
         static public String GetString(Byte[] buffer, Int32 offset, Int32 count, Encoding encoding)

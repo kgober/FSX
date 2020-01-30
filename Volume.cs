@@ -21,7 +21,6 @@
 
 
 // Future Improvements / To Do
-// implement Block.GetInt32, GetUInt32 (incl. pdp-endian versions)
 // provide a way to pad an image with leading zeros
 // support volume partitioning (more efficiently than ClusteredVolume)
 // allow CHSVolume.this to lazily create/grow Tracks as needed
@@ -51,6 +50,18 @@ namespace FSX
         public abstract UInt16 GetUInt16B(ref Int32 offset);
         public abstract UInt16 GetUInt16L(Int32 offset);
         public abstract UInt16 GetUInt16L(ref Int32 offset);
+        public abstract Int32 GetInt32B(Int32 offset);
+        public abstract Int32 GetInt32B(ref Int32 offset);
+        public abstract Int32 GetInt32L(Int32 offset);
+        public abstract Int32 GetInt32L(ref Int32 offset);
+        public abstract Int32 GetInt32P(Int32 offset);
+        public abstract Int32 GetInt32P(ref Int32 offset);
+        public abstract UInt32 GetUInt32B(Int32 offset);
+        public abstract UInt32 GetUInt32B(ref Int32 offset);
+        public abstract UInt32 GetUInt32L(Int32 offset);
+        public abstract UInt32 GetUInt32L(ref Int32 offset);
+        public abstract UInt32 GetUInt32P(Int32 offset);
+        public abstract UInt32 GetUInt32P(ref Int32 offset);
         public abstract String GetString(Int32 offset, Int32 count, Encoding encoding);
         public abstract String GetCString(Int32 offset, Int32 maxCount, Encoding encoding);
         public abstract Int32 IndexOf(Int32 offset, String pattern, Encoding encoding);
@@ -193,6 +204,66 @@ namespace FSX
         public override UInt16 GetUInt16L(ref Int32 offset)
         {
             return Buffer.GetUInt16L(mData, ref offset);
+        }
+
+        public override Int32 GetInt32B(Int32 offset)
+        {
+            return Buffer.GetInt32B(mData, offset);
+        }
+
+        public override Int32 GetInt32B(ref Int32 offset)
+        {
+            return Buffer.GetInt32B(mData, ref offset);
+        }
+
+        public override Int32 GetInt32L(Int32 offset)
+        {
+            return Buffer.GetInt32L(mData, offset);
+        }
+
+        public override Int32 GetInt32L(ref Int32 offset)
+        {
+            return Buffer.GetInt32L(mData, ref offset);
+        }
+
+        public override Int32 GetInt32P(Int32 offset)
+        {
+            return Buffer.GetInt32P(mData, offset);
+        }
+
+        public override Int32 GetInt32P(ref Int32 offset)
+        {
+            return Buffer.GetInt32P(mData, ref offset);
+        }
+
+        public override UInt32 GetUInt32B(Int32 offset)
+        {
+            return Buffer.GetUInt32B(mData, offset);
+        }
+
+        public override UInt32 GetUInt32B(ref Int32 offset)
+        {
+            return Buffer.GetUInt32B(mData, ref offset);
+        }
+
+        public override UInt32 GetUInt32L(Int32 offset)
+        {
+            return Buffer.GetUInt32L(mData, offset);
+        }
+
+        public override UInt32 GetUInt32L(ref Int32 offset)
+        {
+            return Buffer.GetUInt32L(mData, ref offset);
+        }
+
+        public override UInt32 GetUInt32P(Int32 offset)
+        {
+            return Buffer.GetUInt32P(mData, offset);
+        }
+
+        public override UInt32 GetUInt32P(ref Int32 offset)
+        {
+            return Buffer.GetUInt32P(mData, ref offset);
         }
 
         public override String GetString(Int32 offset, Int32 count, Encoding encoding)
@@ -500,6 +571,162 @@ namespace FSX
                 n = BitConverter.ToUInt16(buf, 0);
             }
             offset += 2;
+            return n;
+        }
+
+        public override Int32 GetInt32B(Int32 offset)
+        {
+            Int32 i = offset;
+            return GetInt32B(ref i);
+        }
+
+        public override Int32 GetInt32B(ref Int32 offset)
+        {
+            Int32 p = offset / mBlockSize;
+            Int32 q = offset % mBlockSize;
+            Int32 n;
+            if (q + 3 < mBlockSize)
+            {
+                n = mData[p].GetInt32B(q);
+            }
+            else
+            {
+                Byte[] buf = new Byte[4];
+                Int32 i = mData[p].CopyTo(buf, 0, q, mBlockSize - q);
+                mData[++p].CopyTo(buf, i, 0, 4 - i);
+                n = Buffer.GetInt32B(buf, 0);
+            }
+            offset += 4;
+            return n;
+        }
+
+        public override Int32 GetInt32L(Int32 offset)
+        {
+            Int32 i = offset;
+            return GetInt32L(ref i);
+        }
+
+        public override Int32 GetInt32L(ref Int32 offset)
+        {
+            Int32 p = offset / mBlockSize;
+            Int32 q = offset % mBlockSize;
+            Int32 n;
+            if (q + 3 < mBlockSize)
+            {
+                n = mData[p].GetInt32L(q);
+            }
+            else
+            {
+                Byte[] buf = new Byte[4];
+                Int32 i = mData[p].CopyTo(buf, 0, q, mBlockSize - q);
+                mData[++p].CopyTo(buf, i, 0, 4 - i);
+                n = Buffer.GetInt32L(buf, 0);
+            }
+            offset += 4;
+            return n;
+        }
+
+        public override Int32 GetInt32P(Int32 offset)
+        {
+            Int32 i = offset;
+            return GetInt32P(ref i);
+        }
+
+        public override Int32 GetInt32P(ref Int32 offset)
+        {
+            Int32 p = offset / mBlockSize;
+            Int32 q = offset % mBlockSize;
+            Int32 n;
+            if (q + 3 < mBlockSize)
+            {
+                n = mData[p].GetInt32P(q);
+            }
+            else
+            {
+                Byte[] buf = new Byte[4];
+                Int32 i = mData[p].CopyTo(buf, 0, q, mBlockSize - q);
+                mData[++p].CopyTo(buf, i, 0, 4 - i);
+                n = Buffer.GetInt32P(buf, 0);
+            }
+            offset += 4;
+            return n;
+        }
+
+        public override UInt32 GetUInt32B(Int32 offset)
+        {
+            Int32 i = offset;
+            return GetUInt32B(ref i);
+        }
+
+        public override UInt32 GetUInt32B(ref Int32 offset)
+        {
+            Int32 p = offset / mBlockSize;
+            Int32 q = offset % mBlockSize;
+            UInt32 n;
+            if (q + 3 < mBlockSize)
+            {
+                n = mData[p].GetUInt32B(q);
+            }
+            else
+            {
+                Byte[] buf = new Byte[4];
+                Int32 i = mData[p].CopyTo(buf, 0, q, mBlockSize - q);
+                mData[++p].CopyTo(buf, i, 0, 4 - i);
+                n = Buffer.GetUInt32B(buf, 0);
+            }
+            offset += 4;
+            return n;
+        }
+
+        public override UInt32 GetUInt32L(Int32 offset)
+        {
+            Int32 i = offset;
+            return GetUInt32L(ref i);
+        }
+
+        public override UInt32 GetUInt32L(ref Int32 offset)
+        {
+            Int32 p = offset / mBlockSize;
+            Int32 q = offset % mBlockSize;
+            UInt32 n;
+            if (q + 3 < mBlockSize)
+            {
+                n = mData[p].GetUInt32L(q);
+            }
+            else
+            {
+                Byte[] buf = new Byte[4];
+                Int32 i = mData[p].CopyTo(buf, 0, q, mBlockSize - q);
+                mData[++p].CopyTo(buf, i, 0, 4 - i);
+                n = Buffer.GetUInt32L(buf, 0);
+            }
+            offset += 4;
+            return n;
+        }
+
+        public override UInt32 GetUInt32P(Int32 offset)
+        {
+            Int32 i = offset;
+            return GetUInt32P(ref i);
+        }
+
+        public override UInt32 GetUInt32P(ref Int32 offset)
+        {
+            Int32 p = offset / mBlockSize;
+            Int32 q = offset % mBlockSize;
+            UInt32 n;
+            if (q + 3 < mBlockSize)
+            {
+                n = mData[p].GetUInt32P(q);
+            }
+            else
+            {
+                Byte[] buf = new Byte[4];
+                Int32 i = mData[p].CopyTo(buf, 0, q, mBlockSize - q);
+                mData[++p].CopyTo(buf, i, 0, 4 - i);
+                n = Buffer.GetUInt32P(buf, 0);
+            }
+            offset += 4;
             return n;
         }
 
@@ -1159,7 +1386,7 @@ namespace FSX
         private String mInfo;
         private Int32 mBlockCount;
         private Block[] mCache;
-        
+
         public PaddedVolume(Volume volume, Int32 padBlocks)
         {
             mVol = volume;

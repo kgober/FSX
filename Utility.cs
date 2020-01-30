@@ -137,6 +137,174 @@ namespace FSX
             return BitConverter.ToUInt16(buffer, p);
         }
 
+        static public Int32 GetInt32B(Byte[] buffer, Int32 offset)
+        {
+            if (BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, offset, 4);
+                offset = 0;
+            }
+            return BitConverter.ToInt32(buffer, offset);
+        }
+
+        static public Int32 GetInt32B(Byte[] buffer, ref Int32 offset)
+        {
+            Int32 p = offset;
+            if (BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, p, 4);
+                p = 0;
+            }
+            offset += 4;
+            return BitConverter.ToInt32(buffer, p);
+        }
+
+        static public Int32 GetInt32L(Byte[] buffer, Int32 offset)
+        {
+            if (!BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, offset, 4);
+                offset = 0;
+            }
+            return BitConverter.ToInt32(buffer, offset);
+        }
+
+        static public Int32 GetInt32L(Byte[] buffer, ref Int32 offset)
+        {
+            Int32 p = offset;
+            if (!BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, p, 4);
+                p = 0;
+            }
+            offset += 4;
+            return BitConverter.ToInt32(buffer, p);
+        }
+
+        static public Int32 GetInt32P(Byte[] buffer, Int32 offset)
+        {
+            Byte[] buf = new Byte[4];
+            if (BitConverter.IsLittleEndian)
+            {
+                buf[2] = buffer[offset++];
+                buf[3] = buffer[offset++];
+                buf[0] = buffer[offset++];
+                buf[1] = buffer[offset++];
+            }
+            else
+            {
+                buf[1] = buffer[offset++];
+                buf[0] = buffer[offset++];
+                buf[3] = buffer[offset++];
+                buf[2] = buffer[offset++];
+            }
+            return BitConverter.ToInt32(buf, 0);
+        }
+
+        static public Int32 GetInt32P(Byte[] buffer, ref Int32 offset)
+        {
+            Byte[] buf = new Byte[4];
+            if (BitConverter.IsLittleEndian)
+            {
+                buf[2] = buffer[offset++];
+                buf[3] = buffer[offset++];
+                buf[0] = buffer[offset++];
+                buf[1] = buffer[offset++];
+            }
+            else
+            {
+                buf[1] = buffer[offset++];
+                buf[0] = buffer[offset++];
+                buf[3] = buffer[offset++];
+                buf[2] = buffer[offset++];
+            }
+            return BitConverter.ToInt32(buf, 0);
+        }
+
+        static public UInt32 GetUInt32B(Byte[] buffer, Int32 offset)
+        {
+            if (BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, offset, 4);
+                offset = 0;
+            }
+            return BitConverter.ToUInt32(buffer, offset);
+        }
+
+        static public UInt32 GetUInt32B(Byte[] buffer, ref Int32 offset)
+        {
+            Int32 p = offset;
+            if (BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, p, 4);
+                p = 0;
+            }
+            offset += 4;
+            return BitConverter.ToUInt32(buffer, p);
+        }
+
+        static public UInt32 GetUInt32L(Byte[] buffer, Int32 offset)
+        {
+            if (!BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, offset, 4);
+                offset = 0;
+            }
+            return BitConverter.ToUInt32(buffer, offset);
+        }
+
+        static public UInt32 GetUInt32L(Byte[] buffer, ref Int32 offset)
+        {
+            Int32 p = offset;
+            if (!BitConverter.IsLittleEndian)
+            {
+                buffer = Reverse(buffer, p, 4);
+                p = 0;
+            }
+            offset += 4;
+            return BitConverter.ToUInt32(buffer, p);
+        }
+
+        static public UInt32 GetUInt32P(Byte[] buffer, Int32 offset)
+        {
+            Byte[] buf = new Byte[4];
+            if (BitConverter.IsLittleEndian)
+            {
+                buf[2] = buffer[offset++];
+                buf[3] = buffer[offset++];
+                buf[0] = buffer[offset++];
+                buf[1] = buffer[offset++];
+            }
+            else
+            {
+                buf[1] = buffer[offset++];
+                buf[0] = buffer[offset++];
+                buf[3] = buffer[offset++];
+                buf[2] = buffer[offset++];
+            }
+            return BitConverter.ToUInt32(buf, 0);
+        }
+
+        static public UInt32 GetUInt32P(Byte[] buffer, ref Int32 offset)
+        {
+            Byte[] buf = new Byte[4];
+            if (BitConverter.IsLittleEndian)
+            {
+                buf[2] = buffer[offset++];
+                buf[3] = buffer[offset++];
+                buf[0] = buffer[offset++];
+                buf[1] = buffer[offset++];
+            }
+            else
+            {
+                buf[1] = buffer[offset++];
+                buf[0] = buffer[offset++];
+                buf[3] = buffer[offset++];
+                buf[2] = buffer[offset++];
+            }
+            return BitConverter.ToUInt32(buf, 0);
+        }
+
         static public String GetString(Byte[] buffer, Int32 offset, Int32 count, Encoding encoding)
         {
             return encoding.GetString(buffer, offset, count);

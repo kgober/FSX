@@ -32,11 +32,11 @@
 // To enable comparison of Test results, 'level' should be defined as follows:
 //  0 - check basic volume parameters (return required block size and volume type)
 //  1 - check boot block (return volume size and type)
-//  2 - check volume descriptor (aka home/super block) (return volume size and type)
-//  3 - check file headers (aka inodes) (return volume size and type)
-//  4 - check directory structure (return volume size and type)
-//  5 - check file header allocation (return volume size and type)
-//  6 - check data block allocation (return volume size and type)
+//  2 - check volume descriptor (aka home/super block) (return file system size and type)
+//  3 - check file headers (aka inodes) (return file system size and type)
+//  4 - check directory structure (return file system size and type)
+//  5 - check file header allocation (return file system size and type)
+//  6 - check data block allocation (return file system size and type)
 //
 // Each test method should return true if the requirements for the given level (and
 // all lower levels) are met by the volume, or false otherwise.  If a test method does
@@ -56,6 +56,10 @@
 // and higher a size of -1 means the size can't be determined without examining the
 // volume image at a higher level (e.g., the RT-11 home block doesn't include the
 // volume size, so a level 3 check is required).
+
+
+// Future Improvements / To Do
+// split volume type identification and file system type identification
 
 
 using System;
@@ -173,7 +177,7 @@ namespace FSX
                             Debug.WriteLine(2, "Pass: {0} level {1:D0}", e.Test.Method.DeclaringType.Name, level);
                             volume = e.Volume;
                             size = s;
-                            type = e.Test.Method.DeclaringType;
+                            type = (level >= 2) ? t : e.Test.Method.DeclaringType;
                             L2.Add(e);
                         }
                     }

@@ -417,11 +417,11 @@ namespace FSX
 
         // level 0 - check basic volume parameters (return required block size and volume type)
         // level 1 - check boot block (return volume size and type)
-        // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
-        // level 3 - check file headers (aka inodes) (return volume size and type)
-        // level 4 - check directory structure (return volume size and type)
-        // level 5 - check file header allocation (return volume size and type)
-        // level 6 - check data block allocation (return volume size and type)
+        // level 2 - check volume descriptor (aka home/super block) (return file system size and type)
+        // level 3 - check file headers (aka inodes) (return file system size and type)
+        // level 4 - check directory structure (return file system size and type)
+        // level 5 - check file header allocation (return file system size and type)
+        // level 6 - check data block allocation (return file system size and type)
         public static Boolean Test(Volume volume, Int32 level, out Int32 size, out Type type)
         {
             // level 0 - check basic volume parameters (return required block size and volume type)
@@ -441,7 +441,7 @@ namespace FSX
                 return true;
             }
 
-            // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
+            // level 2 - check volume descriptor (aka home/super block) (return file system size and type)
             size = -1;
             type = null;
             if (volume.BlockCount < 2) return Debug.WriteLine(false, 1, "Unix.Test: volume too small to contain super-block");
@@ -467,7 +467,7 @@ namespace FSX
             type = typeof(Unix);
             if (level == 2) return true;
 
-            // level 3 - check file headers (aka inodes) (return volume size and type)
+            // level 3 - check file headers (aka inodes) (return file system size and type)
             Inode iNode;
             for (UInt16 iNum = 1; iNum <= isize * 16; iNum++)
             {
@@ -480,7 +480,7 @@ namespace FSX
             }
             if (level == 3) return true;
 
-            // level 4 - check directory structure (return volume size and type)
+            // level 4 - check directory structure (return file system size and type)
             iNode = Inode.Get(volume, 1);
             if ((iNode.flags & 0xe000) != 0xc000) return Debug.WriteLine(false, 1, "Unix.Test: root directory i-node type/used flags invalid (is 0x{0:x4}, require 0xc000)", iNode.flags & 0xe000);
             UInt16[] IMap = new UInt16[isize * 16 + 1]; // inode usage map
@@ -533,7 +533,7 @@ namespace FSX
             IMap[1]--; // root directory has no parent, so back out the implied parent link
             if (level == 4) return true;
 
-            // level 5 - check file header allocation (return volume size and type)
+            // level 5 - check file header allocation (return file system size and type)
             for (UInt16 iNum = 1; iNum <= isize * 16; iNum++)
             {
                 iNode = Inode.Get(volume, iNum);
@@ -550,7 +550,7 @@ namespace FSX
             }
             if (level == 5) return true;
 
-            // level 6 - check data block allocation (return volume size and type)
+            // level 6 - check data block allocation (return file system size and type)
             UInt16[] BMap = new UInt16[size]; // block usage map
             for (UInt16 iNum = 1; iNum < isize * 16; iNum++)
             {

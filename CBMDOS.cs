@@ -384,12 +384,12 @@ namespace FSX
 
         // level 0 - check basic volume parameters (return required block size and volume type)
         // level 1 - check boot block (return volume size and type)
-        // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
-        // level 3 - check directory structure (return volume size and type)
-        // level 4 - check file headers (aka inodes) (return volume size and type)
-        // level 5 - check file header allocation (return volume size and type)
-        // level 6 - check data block allocation (return volume size and type)
-        // note: levels 3 and 4 are reversed because this makes more sense for CBMDOS volumes
+        // level 2 - check volume descriptor (aka home/super block) (return file system size and type)
+        // level 3 - check directory structure (return file system size and type)
+        // level 4 - check file headers (aka inodes) (return file system size and type)
+        // level 5 - check file header allocation (return file system size and type)
+        // level 6 - check data block allocation (return file system size and type)
+        // note: levels 3 and 4 are reversed because this makes more sense for CBMDOS file systems
         public static Boolean Test(Volume vol, Int32 level, out Int32 size, out Type type)
         {
             // level 0 - check basic volume parameters (return required block size and volume type)
@@ -412,7 +412,7 @@ namespace FSX
                 return true;
             }
 
-            // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
+            // level 2 - check volume descriptor (aka home/super block) (return file system size and type)
             // treat the first block of the BAM/directory chain as the 'volume descriptor'
             size = -1;
             type = null;
@@ -438,7 +438,7 @@ namespace FSX
             type = typeof(CBMDOS);
             if (level == 2) return true;
 
-            // level 3 - check directory structure (return volume size and type)
+            // level 3 - check directory structure (return file system size and type)
             Int32 dc = (fmt != 0x43) ? 1 : (volume.MaxCylinder <= 77) ? 3 : 5; // number of blocks that precede first directory block
             Int32 bc = (fmt != 0x43) ? 0 : 1; // number of blocks that precede first BAM block
             Int32 maxSect = -1;
@@ -496,7 +496,7 @@ namespace FSX
             }
             if (level == 3) return true;
 
-            // level 4 - check file headers (aka inodes) (return volume size and type)
+            // level 4 - check file headers (aka inodes) (return file system size and type)
             Int32 fc = 0;
             t = (volume.MaxCylinder <= 42) ? 18 : 39;
             s = 1;
@@ -542,11 +542,11 @@ namespace FSX
             }
             if (level == 4) return true;
 
-            // level 5 - check file header allocation (return volume size and type)
+            // level 5 - check file header allocation (return file system size and type)
             // nothing to test here, file headers are integrated into the directory
             if (level == 5) return true;
 
-            // level 6 - check data block allocation (return volume size and type)
+            // level 6 - check data block allocation (return file system size and type)
             // free/used blocks correctly recorded in BAM
             // error if free blocks impossible (i.e. not within volume)
             if (level == 6) return true;

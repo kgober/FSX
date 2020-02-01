@@ -313,6 +313,13 @@ namespace FSX
             return Tar.Test;
         }
 
+        // level 0 - check basic volume parameters (return required block size and volume type)
+        // level 1 - check boot block (return volume size and type)
+        // level 2 - check volume descriptor (aka home/super block) (return file system size and type)
+        // level 3 - check file headers (aka inodes) (return file system size and type)
+        // level 4 - check directory structure (return file system size and type)
+        // level 5 - check file header allocation (return file system size and type)
+        // level 6 - check data block allocation (return file system size and type)
         public static Boolean Test(Volume volume, Int32 level, out Int32 size, out Type type)
         {
             // level 0 - check basic volume parameters (return required block size and volume type)
@@ -323,19 +330,20 @@ namespace FSX
             if (level == 0) return true;
 
             // level 1 - check boot block (return volume size and type)
+            size = -1;
             if (level == 1)
             {
-                size = -1;
                 return true;
             }
 
-            // level 2 - check volume descriptor (aka home/super block) (return volume size and type)
+            // level 2 - check volume descriptor (aka home/super block) (return file system size and type)
+            type = typeof(Tar);
             if (level == 2)
             {
                 return true;
             }
 
-            // level 3 - check file headers (aka inodes) (return volume size and type)
+            // level 3 - check file headers (aka inodes) (return file system size and type)
             Int32 zbc = 0;
             Int32 lbn = 0;
             while (lbn < volume.BlockCount)
@@ -395,10 +403,10 @@ namespace FSX
             size = lbn;
             if (level == 3) return true;
 
-            // level 4 - check directory structure (return volume size and type)
+            // level 4 - check directory structure (return file system size and type)
             if (level == 4) return true;
 
-            // level 5 - check file header allocation (return volume size and type)
+            // level 5 - check file header allocation (return file system size and type)
             zbc = 0;
             lbn = 0;
             while (lbn < volume.BlockCount)
@@ -489,7 +497,7 @@ namespace FSX
             size = lbn;
             if (level == 5) return true;
 
-            // level 6 - check data block allocation (return volume size and type)
+            // level 6 - check data block allocation (return file system size and type)
             if (level == 6) return true;
 
             return false;

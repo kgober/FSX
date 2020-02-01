@@ -378,7 +378,8 @@ namespace FSX
                 n = (magic == "ustar  ") ? 1 : (magic == "ustar") ? 2 : 0;
                 String ver = (n == 2) ? B.GetString(bp + 6, 2, Encoding.ASCII) : null;
                 bp += 8;
-                if (B.GetByte(155) != ((n == 2) ? 0 : 32)) return Debug.WriteLine(false, 1, "Tar.Test: file {0} checksum missing trailing {1} (at file offset {2:D0})", name, (n == 2) ? "null" : "blank", (lbn - 1) * B.Size + 155);
+                // skip this test, sometimes a "ustar  " file ends checksum with null
+                //if (B.GetByte(155) != ((n == 2) ? 0 : 32)) return Debug.WriteLine(false, 1, "Tar.Test: file {0} checksum missing trailing {1} (at file offset {2:D0})", name, (n == 2) ? "null" : "blank", (lbn - 1) * B.Size + 155);
                 if (n == 0)
                 {
                     if (magic.Length != 0) return Debug.WriteLine(false, 1, "Tar.Test: file {0} unrecognized magic {1}", name, magic);

@@ -2,7 +2,7 @@
 File System Exchange is a utility to access data stored in disk images, using an interactive command-line style interface.  The implementation language is C#, targeting the Microsoft .NET Framework 2.0.
 
 Currently the following types of volumes are supported:
-* Unix v5 (and v6 if no single file within the disk image is larger than 917504 bytes)
+* Unix v5 and v6
 * Unix tar files
 * RT-11
 * Files-11 (a.k.a. ODS-1, the RSX-11 file system format)

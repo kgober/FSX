@@ -163,10 +163,10 @@ namespace FSX
             // if there were any candidates that passed level 0, continue to try them
             if (L.Count != 0)
             {
+                Volume volume = null;
                 while (true)
                 {
                     level++;
-                    Volume volume = null;
                     List<Entry> L2 = new List<Entry>();
                     foreach (Entry e in L)
                     {
@@ -194,6 +194,12 @@ namespace FSX
                         break;
                     }
                     L = L2;
+                }
+                // if all tests passed for multiple types, just choose the last one
+                if (level == 6)
+                {
+                    if ((size != -1) && (size != volume.BlockCount)) volume = new PaddedVolume(volume, size - volume.BlockCount);
+                    return ConstructFS(type, volume);
                 }
             }
 

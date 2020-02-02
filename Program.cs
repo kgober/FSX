@@ -534,6 +534,12 @@ namespace FSX
                 CHSVolume d = ImageDisk.Load(s, data);
                 if (d != null) return LoadFS(s, d);
             }
+            if ((path.EndsWith(".td0", StringComparison.OrdinalIgnoreCase)) && (TeleDisk.HasHeader(data)))
+            {
+                // TeleDisk .TD0 image file
+                CHSVolume d = TeleDisk.Load(s, data);
+                if (d != null) return LoadFS(s, d);
+            }
             //if ((path.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)) && ((data.Length % 2048) == 0))
             //{
             //    if (IndexOf(Encoding.ASCII, "DECRT11A    ", data, 512, 512) == 0x3f0)

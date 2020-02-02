@@ -356,6 +356,43 @@ namespace FSX
     }
 
 
+    // CRC class - calculate cyclic redundancy check codes
+    // https://en.wikipedia.org/wiki/Computation_of_cyclic_redundancy_checks
+
+    class CRC
+    {
+        static public UInt16 CRC16(UInt16 poly, Byte[] buffer)
+        {
+            return CRC16(poly, 0, 0, buffer, 0, buffer.Length);
+        }
+
+        static public UInt16 CRC16(UInt16 poly, Byte[] buffer, Int32 offset, Int32 count)
+        {
+            return CRC16(poly, 0, 0, buffer, offset, count);
+        }
+
+        static public UInt16 CRC16(UInt16 poly, UInt16 init, UInt16 xor, Byte[] buffer, Int32 offset, Int32 count)
+        {
+            UInt16 r = init;
+            for (Int32 i = 0; i < count; i++)
+            {
+                Byte b = buffer[offset++];
+                Byte m = 0x80;
+                for (Int32 j = 0; j < 8; j++)
+                {
+                    if ((b & m) != 0) r ^= 0x8000;
+                    m >>= 1;
+                    Boolean f = ((r & 0x8000) != 0);
+                    r <<= 1;
+                    if (f) r ^= poly;
+                }
+            }
+            r ^= xor;
+            return r;
+        }
+    }
+
+
     // Debug class - utility functions to handle debug output
 
     class Debug

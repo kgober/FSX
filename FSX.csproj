@@ -38,6 +38,7 @@
     <Compile Include="Compress.cs" />
     <Compile Include="GZip.cs" />
     <Compile Include="Tar.cs" />
+    <Compile Include="TeleDisk.cs" />
     <Compile Include="Utility.cs" />
     <Compile Include="Volume.cs" />
     <Compile Include="Files11.cs" />

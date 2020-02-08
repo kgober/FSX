@@ -32,7 +32,6 @@
 // improve exception handling
 // improve argument parsing
 // improve 'force' mount of damaged or unrecognizable volumes
-// allow output redirection
 // allow demand-loading from non-compressed image files rather than pre-loading entire file
 // add support for FAT12 volumes
 // add support for FAT16 volumes
@@ -187,6 +186,11 @@ namespace FSX
                 {
                     StreamReader file = new StreamReader(arg);
                     CommandLoop(file); // TODO: prevent endless recursion due to sourcing a file already being sourced
+                }
+                else if (cmd == "out")
+                {
+                    if ((Out != Console.Out) && (Out != null)) Out.Close();
+                    Out = ((arg == null) || (arg.Length == 0)) ? Console.Out : new StreamWriter(arg, true, Encoding.UTF8);
                 }
                 else if (cmd == "help")
                 {
@@ -838,6 +842,7 @@ namespace FSX
             Out.WriteLine("  type|cat [id:]file - show file as text");
             Out.WriteLine("  dump|od [id:]file - show file as a hex dump");
             Out.WriteLine("  save|write [id:]file pathname - export image of file 'file' to file 'pathname'");
+            Out.WriteLine("  out pathname - redirect output to 'pathname' (omit pathname to reset)");
             Out.WriteLine("  verb|verbose n - set verbosity level (default 0)");
             Out.WriteLine("  deb|debug n - set debug level (default 0)");
             Out.WriteLine("  source|. pathname - read commands from 'pathname'");

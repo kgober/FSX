@@ -37,6 +37,7 @@
     <Compile Include="Commodore.cs" />
     <Compile Include="Compress.cs" />
     <Compile Include="GZip.cs" />
+    <Compile Include="RawFS.cs" />
     <Compile Include="Tar.cs" />
     <Compile Include="TeleDisk.cs" />
     <Compile Include="Utility.cs" />

@@ -206,7 +206,7 @@ namespace FSX
             // TODO: if L is non-empty, see if any use can be made of the knowledge
             // that entries in L all passed at least level 'level' tests
 
-            return null;
+            return ((images == null) || (images.Length == 0)) ? null : new RawFS(images[0]);
         }
 
         // call the constructor for 'typeName', passing in 'image'

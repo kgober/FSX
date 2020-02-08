@@ -34,7 +34,6 @@
 // improve 'force' mount of damaged or unrecognizable volumes
 // allow output redirection
 // allow demand-loading from non-compressed image files rather than pre-loading entire file
-// add support for 'raw' volumes (to facilitate examination of unrecognized volumes)
 // add support for FAT12 volumes
 // add support for FAT16 volumes
 // add support for CP/M images

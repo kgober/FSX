@@ -818,8 +818,10 @@ namespace FSX
                     // DEC RX50 Floppy - 5.25" SSDD diskette, 80 tracks, 10 sectors
                     // 'Soft' sector interleave is 2:1, with a 2 sector track-to-track skew.
                     Debug.WriteLine(2, "RX50 image, also testing with interleave applied");
-                    Volume d2 = new InterleavedVolume(volume, 2, 0, 2, 0);
-                    return Auto.Check(new Volume[] { volume, d2 });
+                    Volume d2 = new InterleavedVolume(volume, 2, 0, 2, 0); // if image starts at track 1
+                    Volume d3 = new ClusteredVolume(new InterleavedVolume(volume, 2, 0, 2, 10), 1, 10); // if image includes track 0
+                    Volume d4 = new ClusteredVolume(new InterleavedVolume(volume, 2, 0, 3, 10), 1, 10); // if image includes track 0 (skew 3 allows VENIX RX50 floppies to be read)
+                    return Auto.Check(new Volume[] { volume, d2, d3, d4 });
                 }
             }
             return Auto.Check(new Volume[] { image });

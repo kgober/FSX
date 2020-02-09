@@ -36,6 +36,7 @@
 //     ...
 //     final block of code words ends at the earliest 1-byte boundary (there is no EOF code word)
 //     when code size resets or changes, remaining code words in the current block are discarded.
+//     when a code word spans more than one byte, least significant bits are in first byte
 //
 // LZW compression/decompression algorithm:
 //   https://marknelson.us/posts/1989/10/01/lzw-data-compression.html
@@ -110,7 +111,7 @@ namespace FSX
                 mLength = new Int32[n];
                 for (Int32 i = 0; i < 256; i++) mLength[i] = 1;
                 Int32 block_offset = 3;
-                BitReader R = new BitReader(mData, block_offset);
+                BitReaderL R = new BitReaderL(mData, block_offset);
                 Int32 code_size = 9;
                 Int32 code_max = (1 << code_size) - 1;
                 Int32 next_free = (BLOCK_MODE) ? 257 : 256;
@@ -123,7 +124,7 @@ namespace FSX
                     if ((code == 256) && BLOCK_MODE)
                     {
                         // start reading a new block, with code size reset to 9
-                        R = new BitReader(mData, block_offset = NextBlockOffset(block_offset, R.Offset, code_size));
+                        R = new BitReaderL(mData, block_offset = NextBlockOffset(block_offset, R.Offset, code_size));
                         code_max = (1 << (code_size = 9)) - 1;
                         next_free = 256; // use 256 instead of 257 so next code isn't (usably) added to dictionary
                         continue;
@@ -136,7 +137,7 @@ namespace FSX
                         if ((next_free == code_max) && (code_size < MAX_BITS))
                         {
                             // start reading a new block, with code size increased by 1
-                            R = new BitReader(mData, block_offset = NextBlockOffset(block_offset, R.Offset, code_size));
+                            R = new BitReaderL(mData, block_offset = NextBlockOffset(block_offset, R.Offset, code_size));
                             code_max = (1 << ++code_size) - 1;
                         }
                         next_free++;
@@ -166,7 +167,7 @@ namespace FSX
                 }
 
                 Int32 block_offset = 3;
-                BitReader R = new BitReader(mData, block_offset);
+                BitReaderL R = new BitReaderL(mData, block_offset);
                 Int32 code_size = 9;
                 Int32 code_max = (1 << code_size) - 1;
                 Int32 next_free = (BLOCK_MODE) ? 257 : 256;
@@ -179,7 +180,7 @@ namespace FSX
                     if ((code == 256) && BLOCK_MODE)
                     {
                         // start reading a new block, with code size reset to 9
-                        R = new BitReader(mData, block_offset = NextBlockOffset(block_offset, R.Offset, code_size));
+                        R = new BitReaderL(mData, block_offset = NextBlockOffset(block_offset, R.Offset, code_size));
                         code_max = (1 << (code_size = 9)) - 1;
                         next_free = 256; // use 256 instead of 257 so next code isn't (usably) added to dictionary
                         continue;
@@ -201,7 +202,7 @@ namespace FSX
                         if ((next_free == code_max) && (code_size < MAX_BITS))
                         {
                             // start reading a new block, with code size increased by 1
-                            R = new BitReader(mData, block_offset = NextBlockOffset(block_offset, R.Offset, code_size));
+                            R = new BitReaderL(mData, block_offset = NextBlockOffset(block_offset, R.Offset, code_size));
                             code_max = (1 << ++code_size) - 1;
                         }
                         next_free++;
@@ -232,19 +233,19 @@ namespace FSX
             }
         }
 
-        private class BitReader
+        private class BitReaderL
         {
             Byte[] mData;   // byte array to read from
             Int32 mPtr;     // index of next byte to read
             Int32 mBuf;     // bit buffer
             Int32 mBits;    // number of bits currently held in buffer
 
-            public BitReader(Byte[] data)
+            public BitReaderL(Byte[] data)
             {
                 mData = data;
             }
 
-            public BitReader(Byte[] data, Int32 startOffset) : this(data)
+            public BitReaderL(Byte[] data, Int32 startOffset) : this(data)
             {
                 mPtr = startOffset;
             }

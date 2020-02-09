@@ -28,7 +28,6 @@
 // Future Improvements / To Do
 // allow source to be taken as a pathname if data is null
 // support multi-file images (.TD1, etc.)
-// support Advanced Encryption
 
 
 using System;
@@ -81,8 +80,9 @@ namespace FSX
             p += 2; // header CRC
             if (adc)
             {
-                Debug.WriteLine(1, "TeleDisk Advanced Compression not supported");
-                return null;
+                LZSS.Decompressor D = new LZSS.Decompressor(data, p);
+                data = D.GetBytes();
+                p = 0;
             }
 
             // comment block

@@ -36,6 +36,7 @@
     <Compile Include="CBMDOS.cs" />
     <Compile Include="Commodore.cs" />
     <Compile Include="Compress.cs" />
+    <Compile Include="FAT.cs" />
     <Compile Include="GZip.cs" />
     <Compile Include="LZSS.cs" />
     <Compile Include="RawFS.cs" />

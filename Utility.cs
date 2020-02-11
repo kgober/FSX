@@ -25,6 +25,82 @@ using System.Text;
 
 namespace FSX
 {
+    // BitReaderB / BitReaderL - utility classes to read bit streams from byte arrays
+
+    class BitReaderB
+    {
+        Byte[] mData;   // byte array to read from
+        Int32 mPtr;     // index of next byte to read
+        Int32 mBuf;     // bit buffer
+        Int32 mBits;    // number of bits currently held in buffer
+
+        public BitReaderB(Byte[] data)
+        {
+            mData = data;
+        }
+
+        public BitReaderB(Byte[] data, Int32 startOffset) : this(data)
+        {
+            mPtr = startOffset;
+        }
+
+        public Int32 Offset
+        {
+            get { return mPtr; }
+        }
+
+        public Int32 Next(Int32 bits)
+        {
+            while (mBits < bits)
+            {
+                if (mPtr >= mData.Length) return -1;
+                mBuf <<= 8;
+                mBuf |= mData[mPtr++]; // add bits at the right
+                mBits += 8;
+            }
+            mBits -= bits;
+            return (mBuf >> mBits) & ((1 << bits) - 1); // remove bits from the left
+        }
+    }
+
+    class BitReaderL
+    {
+        Byte[] mData;   // byte array to read from
+        Int32 mPtr;     // index of next byte to read
+        Int32 mBuf;     // bit buffer
+        Int32 mBits;    // number of bits currently held in buffer
+
+        public BitReaderL(Byte[] data)
+        {
+            mData = data;
+        }
+
+        public BitReaderL(Byte[] data, Int32 startOffset) : this(data)
+        {
+            mPtr = startOffset;
+        }
+
+        public Int32 Offset
+        {
+            get { return mPtr; }
+        }
+
+        public Int32 Next(Int32 bits)
+        {
+            while (mBits < bits)
+            {
+                if (mPtr >= mData.Length) return -1;
+                mBuf |= mData[mPtr++] << mBits; // add bits at the left
+                mBits += 8;
+            }
+            Int32 n = mBuf & ((1 << bits) - 1); // remove bits from the right
+            mBuf >>= bits;
+            mBits -= bits;
+            return n;
+        }
+    }
+
+    
     // Buffer class - utility functions to access data from byte arrays
 
     class Buffer
@@ -397,12 +473,29 @@ namespace FSX
 
     class Debug
     {
+        public enum Level
+        {
+            None = 0,
+            Error = 1,
+            Warning = 2,
+            Notice = 3,
+            Info = 4,
+            Diag = 5,
+            Trace = 6,
+            Dump = 7
+        }
+
         static public Int32 DebugLevel = 0;
+
+        static public void WriteLine(Level messageLevel, String format, params Object[] args)
+        {
+            if ((Level)DebugLevel < messageLevel) return;
+            Console.Error.WriteLine(format, args);
+        }
 
         static public void WriteLine(Int32 messageLevel, String format, params Object[] args)
         {
-            if (DebugLevel < messageLevel) return;
-            Console.Error.WriteLine(format, args);
+            WriteLine((Level)messageLevel, format, args);
         }
 
         static public Boolean WriteLine(Boolean returnValue, Int32 messageLevel, String format, params Object[] args)

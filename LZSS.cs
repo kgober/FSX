@@ -332,41 +332,5 @@ namespace FSX
                 }
             }
         }
-
-        private class BitReaderB
-        {
-            Byte[] mData;   // byte array to read from
-            Int32 mPtr;     // index of next byte to read
-            Int32 mBuf;     // bit buffer
-            Int32 mBits;    // number of bits currently held in buffer
-
-            public BitReaderB(Byte[] data)
-            {
-                mData = data;
-            }
-
-            public BitReaderB(Byte[] data, Int32 startOffset) : this(data)
-            {
-                mPtr = startOffset;
-            }
-
-            public Int32 Offset
-            {
-                get { return mPtr; }
-            }
-
-            public Int32 Next(Int32 bits)
-            {
-                while (mBits < bits)
-                {
-                    if (mPtr >= mData.Length) return -1;
-                    mBuf <<= 8;
-                    mBuf |= mData[mPtr++]; // add bits at the right
-                    mBits += 8;
-                }
-                mBits -= bits;
-                return (mBuf >> mBits) & ((1 << bits) - 1); // remove bits from the left
-            }
-        }
     }
 }

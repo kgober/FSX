@@ -890,17 +890,17 @@ namespace FSX
             String suffix = null;
             if ((value % 1073741824) == 0)
             {
-                suffix = "GB";
+                suffix = "G";
                 value /= 1073741824;
             }
             if ((value % 1048576) == 0)
             {
-                suffix = "MB";
+                suffix = "M";
                 value /= 1048576;
             }
             else if ((value % 1024) == 0)
             {
-                suffix = "KB";
+                suffix = "K";
                 value /= 1024;
             }
             return String.Format("{0:D0}{1}", value, suffix);
@@ -911,17 +911,17 @@ namespace FSX
             String suffix = null;
             if ((value % 1073741824) == 0)
             {
-                suffix = "GB";
+                suffix = "G";
                 value /= 1073741824;
             }
             if ((value % 1048576) == 0)
             {
-                suffix = "MB";
+                suffix = "M";
                 value /= 1048576;
             }
             else if ((value % 1024) == 0)
             {
-                suffix = "KB";
+                suffix = "K";
                 value /= 1024;
             }
             return String.Format("{0:D0}{1}", value, suffix);

@@ -39,6 +39,7 @@
     <Compile Include="FAT.cs" />
     <Compile Include="GZip.cs" />
     <Compile Include="LZSS.cs" />
+    <Compile Include="Pack.cs" />
     <Compile Include="RawFS.cs" />
     <Compile Include="Tar.cs" />
     <Compile Include="TeleDisk.cs" />

@@ -31,10 +31,11 @@
 // apply consistent style for "public static" and "private static"
 // improve exception handling
 // improve argument parsing
+// consider integrating 'zcat' into 'cat'
+// support new pack (.z) in 'zcat'
+// support compact (.C) in 'zcat'
 // improve 'force' mount of damaged or unrecognizable volumes
 // allow demand-loading from non-compressed image files rather than pre-loading entire file
-// add support for FAT12 volumes
-// add support for FAT16 volumes
 // add support for CP/M images
 // add support for ISO-9660 volumes
 // add support for 7-Zip files (.7z)
@@ -311,6 +312,32 @@ namespace FSX
                 {
                     VDE v = ParseVol(ref arg);
                     v.FS.ListFile(arg, v.FS.DefaultEncoding, Out);
+                }
+                else if (cmd == "zcat")
+                {
+                    VDE v = ParseVol(ref arg);
+                    Byte[] data = v.FS.ReadFile(arg);
+                    if (data != null)
+                    {
+                        if (Compress.HasHeader(data))
+                        {
+                            Compress.Decompressor D = new Compress.Decompressor(data);
+                            if (D.GetByteCount() != -1) data = D.GetBytes();
+                        }
+                        else if (Pack.HasHeader(data))
+                        {
+                            Pack.Decompressor D = new Pack.Decompressor(data);
+                            if (D.GetByteCount() != -1) data = D.GetBytes();
+                        }
+                        String buf = v.FS.DefaultEncoding.GetString(data);
+                        Int32 p = 0;
+                        for (Int32 i = 0; i < buf.Length; i++)
+                        {
+                            if (buf[i] != '\n') continue;
+                            Out.WriteLine(buf.Substring(p, i - p));
+                            p = i + 1;
+                        }
+                    }
                 }
                 else if ((cmd == "dump") || (cmd == "od"))
                 {
@@ -842,6 +869,7 @@ namespace FSX
             Out.WriteLine("  dir|ls [id:]pattern - show directory");
             Out.WriteLine("  dumpdir [id:]pattern - show raw directory data");
             Out.WriteLine("  type|cat [id:]file - show file as text");
+            Out.WriteLine("  zcat [id:]file - show compressed file as text");
             Out.WriteLine("  dump|od [id:]file - show file as a hex dump");
             Out.WriteLine("  save|write [id:]file pathname - export image of file 'file' to file 'pathname'");
             Out.WriteLine("  out pathname - redirect output to 'pathname' (omit pathname to reset)");

@@ -24,6 +24,8 @@
 //
 // https://www.tuhs.org/Archive/Distributions/Research/Dennis_v5/v5man.pdf
 // https://archive.org/download/v6-manual/v6-manual.pdf
+// http://web.cuzuco.com/~cuzuco/v7/v7vol1.pdf
+// http://web.cuzuco.com/~cuzuco/v7/v7vol2b.pdf
 //
 // The Unix v5 file system format is described by the "FILE SYSTEM(V)" man page.
 // The v6 format is similar, except that the maximum file size increases from
@@ -31,6 +33,14 @@
 // The formats are identical as long as no file is larger than 917504 bytes.  If
 // the largest file is between 917505 and 1048576 bytes inclusive, the formats
 // can be (mostly) differentiated by looking at the last indirect block.
+//
+// The Unix v7 file system format increases block pointers to 24 bits, and
+// increases the size of an i-node to contain additional block pointers.  In
+// place of a 'large file' flag, the i-node block pointers are treated the
+// same for all files: 10 direct pointers, then 1 indirect, 1 double-indirect,
+// and 1 triple-indirect pointer.  Each indirect block contains 128 4-byte
+// pointers, so the maximum file size increases to:
+//   512 * (10 + 128 + 128*128 + 128*128*128) = 1082201087 bytes
 //
 // v5/v6 i-node flags
 //  0x8000  allocated / in use
@@ -46,8 +56,8 @@
 // Improvements / To Do
 // in ListDir, handle directory paths not ending in '/'
 // in ListDir, show file dates
-// support Unix v7 file system format
-// support 2BSD file system format (v7 with 1KB blocks)
+// finish support for Unix v7 (incl. Venix)
+// support 2.8BSD+ (v7 with 1k blocks)
 // support BSD Fast File System (FFS)
 // allow files to be written/deleted in images
 
@@ -98,8 +108,7 @@ namespace FSX
                 I.nlinks = block.GetByte(ref offset);
                 I.uid = block.GetByte(ref offset);
                 I.gid = block.GetByte(ref offset);
-                I.size = block.GetByte(ref offset) << 16;
-                I.size += block.GetUInt16L(ref offset);
+                I.size = block.GetInt32P(ref offset);
                 I.addr = new UInt16[8];
                 for (Int32 i = 0; i < 8; i++) I.addr[i] = block.GetUInt16L(ref offset);
                 I.actime = block.GetInt32P(ref offset);
@@ -474,7 +483,7 @@ namespace FSX
                 iNode = Inode.Get(volume, iNum);
                 // sometimes a free i-node has 'nlinks' -1. or other values.
                 //if (((iNode.flags & 0x8000) == 0) && (iNode.nlinks != 0) && (iNode.nlinks != 255)) return Debug.WriteLine(false, 1, "UnixV5.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
-                if (((iNode.flags & 0x8000) != 0) && (iNode.nlinks == 0)) return Debug.WriteLine(false, 1, "UnixV5.Test: i-node {1:D0} is used but has zero link count", iNum);
+                if (((iNode.flags & 0x8000) != 0) && (iNode.nlinks == 0)) return Debug.WriteLine(false, 1, "UnixV5.Test: i-node {0:D0} is used but has zero link count", iNum);
                 if (((iNode.flags & 0x1000) == 0) && (iNode.size > 4096)) return Debug.WriteLine(false, 1, "UnixV5.Test: i-node {0:D0} size exceeds small file limit (is {1:D0}, require n <= 4096)", iNum, iNode.size);
                 if (((iNode.flags & 0x1000) != 0) && (iNode.size > 1048576)) return Debug.WriteLine(false, 1, "UnixV5.Test: i-node {0:D0} size exceeds large file limit (is {1:D0}, require n <= 1048576)", iNum, iNode.size);
             }
@@ -944,6 +953,286 @@ namespace FSX
             {
                 if (BMap[i] == 0) return Debug.WriteLine(false, 1, "UnixV6.Test: block {0:D0} is not allocated and not in free list", i);
             }
+            if (level == 6) return true;
+
+            return false;
+        }
+    }
+
+    partial class UnixV7 : FileSystem
+    {
+        protected class Inode
+        {
+            public Int32 iNum;
+            public UInt16 di_mode;
+            public Int16 di_nlink;
+            public Int16 di_uid;
+            public Int16 di_gid;
+            public Int32 di_size;
+            public Int32[] di_addr;
+            public Int32 di_atime;
+            public Int32 di_mtime;
+            public Int32 di_ctime;
+
+            private Inode(Int32 iNumber)
+            {
+                iNum = iNumber;
+            }
+
+            public Int32 this[Int32 index]
+            {
+                get { return di_addr[index]; }
+            }
+
+            public static Inode Get(Volume volume, Int32 iNum)
+            {
+                Int32 block = 2 + (iNum - 1) / 8;       // 8 i-nodes per block
+                Int32 offset = ((iNum - 1) % 8) * 64;   // each i-node is 64 bytes
+                return Get(volume[block], offset, iNum);
+            }
+
+            public static Inode Get(Block block, Int32 offset, Int32 iNum)
+            {
+                Inode I = new Inode(iNum);
+                I.di_mode = block.GetUInt16L(ref offset);
+                I.di_nlink = block.GetInt16L(ref offset);
+                I.di_uid = block.GetInt16L(ref offset);
+                I.di_gid = block.GetInt16L(ref offset);
+                I.di_size = block.GetInt32P(ref offset);
+                I.di_addr = new Int32[13];
+                for (Int32 i = 0; i < 13; i++)
+                {
+                    I.di_addr[i] = block.GetByte(ref offset) << 16;
+                    I.di_addr[i] |= block.GetUInt16L(ref offset);
+                }
+                offset++;
+                I.di_atime = block.GetInt32P(ref offset);
+                I.di_mtime = block.GetInt32P(ref offset);
+                I.di_ctime = block.GetInt32P(ref offset);
+                return I;
+            }
+        }
+
+        private Volume mVol;
+        private String mType;
+        private Int32 mRoot;
+        private Inode mDirNode;
+        private String mDir;
+
+        public UnixV7(Volume volume)
+        {
+            mVol = volume;
+            mType = "Unix/V7";
+            mRoot = 2;
+            mDirNode = Inode.Get(volume, 2);
+            mDir = "/";
+        }
+
+        public override String Source
+        {
+            get { return mVol.Source; }
+        }
+
+        public override String Type
+        {
+            get { return mType; }
+        }
+
+        public override String Info
+        {
+            get { return mVol.Info; }
+        }
+
+        public override String Dir
+        {
+            get { return mDir; }
+        }
+
+        public override Encoding DefaultEncoding
+        {
+            get { return Encoding.ASCII; }
+        }
+
+        public override void ChangeDir(String dirSpec)
+        {
+        }
+
+        public override void ListDir(String fileSpec, TextWriter output)
+        {
+        }
+
+        public override void DumpDir(String fileSpec, TextWriter output)
+        {
+        }
+
+        public override void ListFile(String fileSpec, Encoding encoding, TextWriter output)
+        {
+        }
+
+        public override void DumpFile(String fileSpec, TextWriter output)
+        {
+            Int32 n;
+            if (Int32.TryParse(fileSpec, out n))
+            {
+                Inode I = Inode.Get(mVol, n);
+                Debug.WriteLine(2, "Inode {0:D0}: size={1:D0} mode={2}", I.iNum, I.di_size, Convert.ToString(I.di_mode, 8));
+                Program.Dump(null, ReadFile(mVol, Inode.Get(mVol, n)), output);
+            }
+        }
+
+        public override String FullName(String fileSpec)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override Byte[] ReadFile(String fileSpec)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override bool SaveFS(String fileName, String format)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    partial class UnixV7
+    {
+        private static Byte[] ReadFile(Volume volume, Inode iNode)
+        {
+            Byte[] buf = new Byte[iNode.di_size];
+            Int32 bp = 0;
+            while (bp < buf.Length)
+            {
+                Int32 n = bp / 512; // file block number
+                Int32 b = 0;        // volume block number
+                if (n < 10)
+                {
+                    b = iNode[n]; // desired block pointer is in i-node
+                }
+                else
+                {
+                    Int32 i = 0;
+                    if ((n -= 10) < 128)
+                    {
+                        i = iNode[10]; // desired block pointer is entry n in block i
+                    }
+                    else
+                    {
+                        Int32 d = 0;
+                        if ((n -= 128) < 128 * 128)
+                        {
+                            d = iNode[11]; // indirect block pointer i is entry n/128 in block d
+                        }
+                        else
+                        {
+                            n -= 128 * 128;
+                            Int32 t = iNode[12]; // double-indirect block pointer d is in block t
+                            if (t != 0)
+                            {
+                                d = n / (128 * 128);
+                                d = volume[t].GetInt32P(4 * d);
+                                n %= 128 * 128; // indirect block pointer i is entry n/128 in block d
+                            }
+                        }
+                        if (d != 0)
+                        {
+                            i = n / 128;
+                            i = volume[d].GetInt32P(4 * i);
+                            n %= 128; // desired block pointer is entry n in block i
+                        }
+                    }
+                    if (i != 0)
+                    {
+                        b = volume[i].GetInt32P(4 * n);
+                    }
+                }
+                if (b != 0) volume[b].CopyTo(buf, bp);
+                bp += 512;
+            }
+            return buf;
+        }
+    }
+
+    partial class UnixV7 : IFileSystemAuto
+    {
+        public static TestDelegate GetTest()
+        {
+            return UnixV7.Test;
+        }
+
+        // level 0 - check basic volume parameters (return required block size and volume type)
+        // level 1 - check boot block (return volume size and type)
+        // level 2 - check volume descriptor (aka home/super block) (return file system size and type)
+        // level 3 - check file headers (aka inodes) (return file system size and type)
+        // level 4 - check directory structure (return file system size and type)
+        // level 5 - check file header allocation (return file system size and type)
+        // level 6 - check data block allocation (return file system size and type)
+        public static Boolean Test(Volume volume, Int32 level, out Int32 size, out Type type)
+        {
+            // level 0 - check basic volume parameters (return required block size and volume type)
+            size = 512;
+            type = typeof(Volume);
+            if (volume == null) return false;
+            if (volume.BlockSize != size) return Debug.WriteLine(false, 1, "UnixV7.Test: invalid block size (is {0:D0}, require {1:D0})", volume.BlockSize, size);
+            if (level == 0) return true;
+
+            // level 1 - check boot block (return volume size and type)
+            if (level == 1)
+            {
+                // Unix V7 doesn't support disk labels
+                size = -1;
+                type = typeof(Volume);
+                if (volume.BlockCount < 1) return Debug.WriteLine(false, 1, "UnixV7.Test: volume too small to contain boot block");
+                return true;
+            }
+
+            // level 2 - check volume descriptor (aka home/super block) (return file system size and type)
+            size = -1;
+            type = null;
+            if (volume.BlockCount < 2) return Debug.WriteLine(false, 1, "UnixV7.Test: volume too small to contain super-block");
+            Block SB = volume[1]; // super-block
+            Int32 bp = 0;
+            Int32 s_isize = SB.GetUInt16L(ref bp); // number of blocks used for inodes
+            Int32 s_fsize = SB.GetInt32P(ref bp); // file system size (in blocks)
+            if (s_isize + 2 > s_fsize) return Debug.WriteLine(false, 1, "UnixV7.Test: super-block i-list exceeds volume size ({0:D0} > {1:D0})", s_isize + 2, s_fsize);
+            Int32 s_nfree = SB.GetInt16L(ref bp);  // number of blocks in super-block free block list
+            if ((s_nfree < 0) || (s_nfree > 50)) return Debug.WriteLine(false, 1, "UnixV7.Test: super-block free block count invalid (is {0:D0}, require 0 <= n <= 50)", s_nfree);
+            Int32 p;
+            for (Int32 i = 0; i < s_nfree; i++)
+            {
+                if (((p = SB.GetInt32P(bp + 4 * i)) < s_isize + 2) || (p >= s_fsize)) return Debug.WriteLine(false, 1, "UnixV7.Test: super-block free block {0:D0} invalid (is {1:D0}, require {2:D0} <= n < {3:D0})", i, p, s_isize + 2, s_fsize);
+            }
+            bp += 50 * 4;
+            Int32 s_ninode = SB.GetUInt16L(ref bp); // number of inodes in super-block free inode list
+            if (s_ninode > 100) return Debug.WriteLine(false, 1, "UnixV7.Test: super-block free i-node count invalid (is {0:D0}, require n <= 100)", s_ninode);
+            for (Int32 i = 0; i < s_ninode; i++)
+            {
+                if (((p = SB.GetUInt16L(bp + 2 * i)) < 1) || (p > s_isize * 8)) return Debug.WriteLine(false, 1, "UnixV7.Test: super-block free i-number {0:D0} invalid (is {1:D0}, require 1 <= n < {2:D0})", i, p, s_isize * 8);
+            }
+            size = s_fsize;
+            type = typeof(UnixV7);
+            if (level == 2) return true;
+
+            // level 3 - check file headers (aka inodes) (return file system size and type)
+            Inode iNode;
+            for (UInt16 iNum = 1; iNum <= s_isize * 8; iNum++)
+            {
+                iNode = Inode.Get(volume, iNum);
+                if (iNode.di_nlink < 0) return Debug.WriteLine(false, 1, "UnixV7.Test: i-node {0:D0} link count invalid (is {1:D0}, require n >= 0)", iNum, iNode.di_nlink);
+                if ((iNode.di_size < 0) || (iNode.di_size > 1082201088)) return Debug.WriteLine(false, 1, "UnixV7.Test: i-node {0:D0} size invalid (is {1:D0}, require 0 <= n <= 1082201088)", iNum, iNode.di_size);
+                if ((iNode.di_mode == 0) && (iNode.di_nlink != 0)) return Debug.WriteLine(false, 1, "UnixV7.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.di_nlink);
+                if ((iNode.di_mode != 0) && (iNode.di_nlink == 0)) return Debug.WriteLine(false, 1, "UnixV7.Test: i-node {0:D0} is used but has zero link count", iNum);
+            }
+            if (level == 3) return true;
+
+            // level 4 - check directory structure (return file system size and type)
+            if (level == 4) return true;
+
+            // level 5 - check file header allocation (return file system size and type)
+            if (level == 5) return true;
+
+            // level 6 - check data block allocation (return file system size and type)
             if (level == 6) return true;
 
             return false;

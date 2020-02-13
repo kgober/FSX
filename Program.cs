@@ -1025,7 +1025,7 @@ namespace FSX
             Char QL = (bPQL == -1) ? ' ' : '.'; // Quarter Line marker
             String fmt = String.Format("{0:x0}", data.Length - 1);
             fmt = String.Concat("{0}{1:X", fmt.Length.ToString("D0"), "} ");
-            Int32 n = bytesPerSection;
+            Int32 n = (bytesPerSection == 0) ? data.Length : bytesPerSection;
             for (Int32 i = 0; i < data.Length; )
             {
                 Int32 l = (n < bytesPerLine) ? n : bytesPerLine;

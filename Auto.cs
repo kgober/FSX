@@ -178,7 +178,7 @@ namespace FSX
                             volume = e.Volume;
                             size = s;
                             type = (level >= 2) ? t : e.Test.Method.DeclaringType;
-                            L2.Add(e);
+                            L2.Add(((level > 1) && (size > volume.BlockCount)) ? new Entry(e.Test, volume = new PaddedVolume(volume, size - volume.BlockCount)) : e);
                         }
                     }
                     if ((level > 1) && (L2.Count == 1))

@@ -498,15 +498,25 @@ namespace FSX
             WriteLine((Level)messageLevel, format, args);
         }
 
-        static public Boolean WriteInfo(Boolean returnValue, String format, params Object[] args)
+        static public void WriteInfo(String format, params Object[] args)
         {
             WriteLine(Level.Info, format, args);
-            return returnValue;
+        }
+
+        static public void WriteDiag(String format, params Object[] args)
+        {
+            WriteLine(Level.Diag, format, args);
         }
 
         static public Boolean WriteLine(Boolean returnValue, Int32 messageLevel, String format, params Object[] args)
         {
             WriteLine(messageLevel, format, args);
+            return returnValue;
+        }
+
+        static public Boolean WriteInfo(Boolean returnValue, String format, params Object[] args)
+        {
+            WriteLine(Level.Info, format, args);
             return returnValue;
         }
     }

@@ -99,6 +99,10 @@ namespace FSX
 {
     partial class UnixV5 : FileSystem
     {
+        private const Int32 INOPB = 16;
+        private const Int32 ISIZE = 32;
+        private const Int32 ROOT_INUM = 1;
+
         protected class Inode
         {
             public Int32 iNum;
@@ -123,23 +127,20 @@ namespace FSX
 
             public static Inode Get(Volume volume, Int32 iNum)
             {
-                Int32 block = 2 + (iNum - 1) / 16;
-                Int32 offset = ((iNum - 1) % 16) * 32;
-                return Get(volume[block], offset, iNum);
-            }
-
-            public static Inode Get(Block block, Int32 offset, Int32 iNum)
-            {
+                Int32 block = 2 + (iNum - 1) / INOPB;
+                Int32 offset = ((iNum - 1) % INOPB) * ISIZE;
+                Block B = volume[block];
                 Inode I = new Inode(iNum);
-                I.flags = block.GetUInt16L(ref offset);
-                I.nlinks = block.GetByte(ref offset);
-                I.uid = block.GetByte(ref offset);
-                I.gid = block.GetByte(ref offset);
-                I.size = block.GetInt32P(ref offset);
+                I.flags = B.GetUInt16L(ref offset);
+                I.nlinks = B.GetByte(ref offset);
+                I.uid = B.GetByte(ref offset);
+                I.gid = B.GetByte(ref offset);
+                I.size = B.GetByte(ref offset) << 16;
+                I.size += B.GetUInt16L(ref offset);
                 I.addr = new UInt16[8];
-                for (Int32 i = 0; i < 8; i++) I.addr[i] = block.GetUInt16L(ref offset);
-                I.actime = block.GetInt32P(ref offset);
-                I.modtime = block.GetInt32P(ref offset);
+                for (Int32 i = 0; i < 8; i++) I.addr[i] = B.GetUInt16L(ref offset);
+                I.actime = B.GetInt32P(ref offset);
+                I.modtime = B.GetInt32P(ref offset);
                 return I;
             }
         }
@@ -154,8 +155,8 @@ namespace FSX
         {
             mVol = volume;
             mType = "Unix/V5";
-            mRoot = 1;
-            mDirNode = Inode.Get(volume, 1);
+            mRoot = ROOT_INUM;
+            mDirNode = Inode.Get(volume, ROOT_INUM);
             mDir = "/";
         }
 
@@ -465,17 +466,11 @@ namespace FSX
             if (level == 0) return true;
 
             // level 1 - check boot block (return volume size and type)
-            if (level == 1)
-            {
-                // Unix V5 doesn't support disk labels
-                size = -1;
-                type = typeof(Volume);
-                if (volume.BlockCount < 1) return Debug.WriteLine(false, 1, "UnixV5.Test: volume too small to contain boot block");
-                return true;
-            }
+            size = -1; // Unix V5 doesn't support disk labels
+            if (volume.BlockCount < 1) return Debug.WriteLine(false, 1, "UnixV5.Test: volume too small to contain boot block");
+            if (level == 1) return true;
 
             // level 2 - check volume descriptor (aka home/super block) (return file system size and type)
-            size = -1;
             type = null;
             if (volume.BlockCount < 2) return Debug.WriteLine(false, 1, "UnixV5.Test: volume too small to contain super-block");
             Block SB = volume[1]; // super-block
@@ -498,7 +493,7 @@ namespace FSX
             }
             size = n;
             type = typeof(UnixV5);
-            if (level == 2) return true;
+            if (level == 2) return Debug.WriteInfo(true, "UnixV5.Test: file system size: {0:D0} blocks ({1:D0} i-nodes in blocks 2-{2:D0}, data in blocks {3:D0}-{4:D0}", size, isize * INOPB, isize + 1, isize + 2, size - 1);
 
             // level 3 - check file headers (aka inodes) (return file system size and type)
             Inode iNode;
@@ -1137,8 +1132,8 @@ namespace FSX
             if (Int32.TryParse(fileSpec, out n))
             {
                 Inode I = Inode.Get(mVol, n);
-                Debug.WriteLine(2, "Inode {0:D0}: size={1:D0} mode={2}{3} nlink={4:D0} uid={5:D0} gid={6:D0}", I.iNum, I.di_size, (I.di_mode == 0) ? null : "0", Convert.ToString(I.di_mode, 8), I.di_nlink, I.di_uid, I.di_gid);
-                for (Int32 i = 0; i < 13; i++) Debug.WriteLine(2, "di_addr[{0:D0}]: {1:D0}", i, I.di_addr[i]);
+                Debug.WriteDiag("Inode {0:D0}: size={1:D0} mode={2}{3} nlink={4:D0} uid={5:D0} gid={6:D0}", I.iNum, I.di_size, (I.di_mode == 0) ? null : "0", Convert.ToString(I.di_mode, 8), I.di_nlink, I.di_uid, I.di_gid);
+                for (Int32 i = 0; i < 13; i++) Debug.WriteDiag("di_addr[{0:D0}]: {1:D0}", i, I.di_addr[i]);
                 Program.Dump(null, ReadFile(Inode.Get(mVol, n)), output);
             }
         }

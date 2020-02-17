@@ -1210,8 +1210,9 @@ namespace FSX
             if (s_isize > s_fsize) return Debug.WriteInfo(false, "UnixV7.Test: super-block i-list exceeds file system size ({0:D0} > {1:D0})", s_isize, s_fsize);
             Int32 n = SB.GetInt16L(ref bp); // SB[6] - number of blocks in super-block free block list
             if ((n < 0) || (n > 50)) return Debug.WriteInfo(false, "UnixV7.Test: super-block free block count invalid (is {0:D0}, require 0 <= n <= 50)", n);
-            Int32 p;
-            for (Int32 i = 0; i < n; i++) // SB[8] - free block list
+            Int32 p = SB.GetInt32P(bp); // SB[8] - free block chain next pointer
+            if ((p != 0) && ((p < s_isize) || (p >= s_fsize))) return Debug.WriteInfo(false, "UnixV7.Test: super-block free chain pointer invalid (is {0:D0}, require {1:D0} <= n < {2:D0})", p, s_isize, s_fsize);
+            for (Int32 i = 1; i < n; i++) // SB[10] - free block list
             {
                 if (((p = SB.GetInt32P(bp + 4 * i)) < s_isize) || (p >= s_fsize)) return Debug.WriteInfo(false, "UnixV7.Test: super-block free block {0:D0} invalid (is {1:D0}, require {2:D0} <= n < {3:D0})", i, p, s_isize, s_fsize);
             }
@@ -1442,26 +1443,35 @@ namespace FSX
             // mark free blocks with 2
             bp = 6;
             n = SB.GetInt16L(ref bp); // number of blocks in super-block free block list
-            for (Int32 i = 0; i < n; i++)
+            if ((p = SB.GetInt32P(ref bp)) != 0) // free block chain next pointer
+            {
+                if (BMap[p] != 0) return Debug.WriteInfo(false, "UnixV7.Test: block {0:D0} in super-block free list is allocated", p);
+                BMap[p] = 2;
+            }
+            for (Int32 i = 1; i < n; i++)
             {
                 p = SB.GetInt32P(ref bp);
                 if (BMap[p] != 0) return Debug.WriteInfo(false, "UnixV7.Test: block {0:D0} in super-block free list is allocated", p);
                 BMap[p] = 2;
             }
             // enumerate blocks in free block chain
-            p = SB.GetInt32P(8);
-            while (p != 0)
+            n = SB.GetInt32P(8);
+            while (n != 0)
             {
-                Block B = volume[p];
+                Block B = volume[n];
                 bp = 0;
-                for (Int32 i = 0; i < 128; i++)
+                if ((n = B.GetInt32P(ref bp)) != 0)
+                {
+                    if (BMap[n] != 0) return Debug.WriteInfo(false, "UnixV7.Test: block {0:D0} in super-block free list is allocated", n);
+                    BMap[n] = 2;
+                }
+                for (Int32 i = 1; i < 128; i++)
                 {
                     p = B.GetInt32P(ref bp);
                     if ((p < s_isize) || (p >= s_fsize)) return Debug.WriteInfo(false, "UnixV7.Test: block {0:D0} in free block chain falls outside volume block range (require {1:D0} <= n < {2:D0})", p, s_isize, s_fsize);
                     if (BMap[p] != 0) return Debug.WriteInfo(false, "UnixV7.Test: block {0:D0} in free block chain is allocated", p);
                     BMap[p] = 2;
                 }
-                p = B.GetInt32P(0);
             }
             // unmarked blocks are lost -- not allocated and not in free list
             for (Int32 i = 0; i < s_fsize; i++)

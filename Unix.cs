@@ -92,7 +92,6 @@
 
 
 // Improvements / To Do
-// merge v5/v7 Test updates into v6
 // in Test, check for duplicate names in a directory
 // relax link count check for inodes (file systems are readable despite this)
 // relax block allocation checks (file systems are readable despite this)
@@ -659,7 +658,7 @@ namespace FSX
             }
             // also check super-block free list
             bp = 206;
-            n = SB.GetInt16L(ref bp);
+            n = SB.GetUInt16L(ref bp);
             for (Int32 i = 0; i < n; i++)
             {
                 UInt16 iNum = SB.GetUInt16L(ref bp);
@@ -696,7 +695,7 @@ namespace FSX
             for (Int32 i = isize + 2; i < fsize; i++) if (BMap[i] != 0) BMap[i] = 1;
             // mark free blocks with 2
             bp = 4;
-            n = SB.GetInt16L(ref bp); // number of blocks in super-block free block list
+            n = SB.GetUInt16L(ref bp); // number of blocks in super-block free block list
             if ((p = SB.GetUInt16L(ref bp)) != 0) // free block chain next pointer
             {
                 if (BMap[p] != 0) return Debug.WriteInfo(false, "UnixV5.Test: list block {0:D0} in super-block free list is allocated", p);
@@ -713,7 +712,7 @@ namespace FSX
             {
                 Block B = volume[p];
                 bp = 0;
-                n = B.GetInt16L(ref bp); // number of entries listed in this block
+                n = B.GetUInt16L(ref bp); // number of entries listed in this block
                 if ((p = B.GetUInt16L(ref bp)) != 0)
                 {
                     if (BMap[p] != 0) return Debug.WriteInfo(false, "UnixV5.Test: list block {0:D0} in free block chain is allocated", p);
@@ -802,61 +801,86 @@ namespace FSX
             if (level == 0) return true;
 
             // level 1 - check boot block (return volume size and type)
-            if (level == 1)
-            {
-                // Unix V5 doesn't support disk labels
-                size = -1;
-                type = typeof(Volume);
-                if (volume.BlockCount < 1) return Debug.WriteInfo(false, "UnixV6.Test: volume too small to contain boot block");
-                return true;
-            }
+            size = -1; // Unix V6 doesn't support disk labels
+            if (volume.BlockCount < 1) return Debug.WriteInfo(false, "UnixV6.Test: volume too small to contain boot block");
+            if (level == 1) return true;
 
             // level 2 - check volume descriptor (aka home/super block) (return file system size and type)
-            size = -1;
             type = null;
             if (volume.BlockCount < 2) return Debug.WriteInfo(false, "UnixV6.Test: volume too small to contain super-block");
             Block SB = volume[1]; // super-block
-            Int32 isize = SB.GetUInt16L(0); // number of blocks used for inodes
-            Int32 n = SB.GetUInt16L(2); // file system size (in blocks)
-            if (isize + 2 > n) return Debug.WriteInfo(false, "UnixV6.Test: super-block i-list exceeds volume size ({0:D0} > {1:D0})", isize + 2, n);
-            Int32 p = SB.GetInt16L(4);  // number of blocks in super-block free block list
-            if ((p < 1) || (p > 100)) return Debug.WriteInfo(false, "UnixV6.Test: super-block free block count invalid (is {0:D0}, require 1 <= n <= 100)", p);
-            Int32 l = 2 * p;
-            for (Int32 i = 0; i < l; i += 2)
+            Int32 bp = 0;
+            Int32 isize = SB.GetUInt16L(ref bp); // SB[0] - number of blocks used for inodes
+            if (volume.BlockCount < isize + 2) return Debug.WriteInfo(false, "UnixV6.Test: volume too small to contain i-node list (blocks {0:D0}-{1:D0} > {2:D0})", 2, isize + 1, volume.BlockCount - 1);
+            Int32 fsize = SB.GetUInt16L(ref bp); // SB[2] - file system size (in blocks)
+            if (isize + 2 > fsize) return Debug.WriteInfo(false, "UnixV6.Test: super-block i-list exceeds file system size ({0:D0} > {1:D0})", isize + 2, fsize);
+            Int32 n = SB.GetUInt16L(ref bp); // SB[4] - number of blocks in super-block free block list
+            if (n > 100) return Debug.WriteInfo(false, "UnixV6.Test: super-block free block count invalid (is {0:D0}, require 0 <= n <= 100)", n);
+            Int32 p = SB.GetUInt16L(bp); // SB[6] - free block chain next pointer
+            if ((p != 0) && ((p < isize + 2) || (p >= fsize))) return Debug.WriteInfo(false, "UnixV6.Test: super-block free chain pointer invalid (is {0:D0}, require {1:D0} <= n < {2:D0})", p, isize + 2, fsize);
+            for (Int32 i = 1; i < n; i++) // SB[8] - free block list
             {
-                if (((p = SB.GetUInt16L(6 + i)) < isize + 2) || (p >= n)) return Debug.WriteInfo(false, "UnixV6.Test: super-block free block {0:D0} invalid (is {1:D0}, require {2:D0} <= n < {3:D0})", i / 2, p, isize + 2, n);
+                if (((p = SB.GetUInt16L(bp + 2 * i)) < isize + 2) || (p >= fsize)) return Debug.WriteInfo(false, "UnixV6.Test: super-block free block {0:D0} invalid (is {1:D0}, require {2:D0} <= n < {3:D0})", i, p, isize + 2, fsize);
             }
-            p = SB.GetUInt16L(206); // number of inodes in super-block free inode list
-            if (p > 100) return Debug.WriteInfo(false, "UnixV6.Test: super-block free i-node count invalid (is {0:D0}, require n <= 100)", p);
-            l = 2 * p;
-            for (Int32 i = 0; i < l; i += 2)
+            bp += 100 * 2;
+            n = SB.GetUInt16L(ref bp); // SB[206] - number of inodes in super-block free inode list
+            if (n > 100) return Debug.WriteInfo(false, "UnixV6.Test: super-block free i-node count invalid (is {0:D0}, require 0 <= n <= 100)", n);
+            for (Int32 i = 0; i < n; i++)
             {
-                if (((p = SB.GetUInt16L(208 + i)) < 1) || (p > isize * 16)) return Debug.WriteInfo(false, "UnixV6.Test: super-block free i-number {0:D0} invalid (is {1:D0}, require 1 <= n < {2:D0})", i / 2, p, isize * 16);
+                if (((p = SB.GetUInt16L(bp + 2 * i)) < 1) || (p > isize * INOPB)) return Debug.WriteInfo(false, "UnixV6.Test: super-block free i-number {0:D0} invalid (is {1:D0}, require 1 <= n < {2:D0})", i, p, isize * INOPB);
             }
-            size = n;
+            size = fsize;
             type = typeof(UnixV6);
-            if (level == 2) return Debug.WriteInfo(true, "UnixV6.Test: file system size: {0:D0} blocks ({1:D0} i-nodes in blocks 2-{2:D0}, data in blocks {3:D0}-{4:D0}", size, isize * INOPB, isize + 1, isize + 2, size - 1);
+            if (level == 2) return Debug.WriteInfo(true, "UnixV6.Test: file system size: {0:D0} blocks ({1:D0} i-nodes in blocks 2-{2:D0}, data in blocks {3:D0}-{4:D0}", fsize, isize * INOPB, isize + 1, isize + 2, fsize - 1);
 
             // level 3 - check file headers (aka inodes) (return file system size and type)
             Inode iNode;
-            for (UInt16 iNum = 1; iNum <= isize * 16; iNum++)
+            for (UInt16 iNum = 1; iNum <= isize * INOPB; iNum++)
             {
                 iNode = new InodeV6(volume, iNum);
-                // sometimes a free i-node has 'nlinks' -1. or other values.
-                //if (((iNode.flags & 0x8000) == 0) && (iNode.nlinks != 0) && (iNode.nlinks != 255)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
+                n = (iNode.flags & 0x6000) >> 12;
                 if (((iNode.flags & 0x8000) != 0) && (iNode.nlinks == 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is used but has zero link count", iNum);
-                if (((iNode.flags & 0x1000) == 0) && (iNode.size > 4096)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} size exceeds small file limit (is {1:D0}, require n <= 4096)", iNum, iNode.size);
+                //if (((iNode.flags & 0x8000) == 0) && (iNode.nlinks != 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
                 // since iNode.size is a 24-bit number, the below test can't actually ever fail
-                if (((iNode.flags & 0x1000) != 0) && (iNode.size > 16777215)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} size exceeds large file limit (is {1:D0}, require n <= 16777215)", iNum, iNode.size);
+                if ((iNode.size < 0) || (iNode.size > 16777215)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} size invalid (is {1:D0}, require 0 <= n <= 16777215)", iNum, iNode.size);
+                if (((iNode.flags & 0x8000) == 0) && (iNode.size != 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is free but has non-zero size {1:D0}", iNum, iNode.size);
+                if (((iNode.flags & 0x1000) == 0) && (iNode.size > 4096)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} size exceeds small file limit (is {1:D0}, require n <= 4096)", iNum, iNode.size);
+                if ((n != 0) && (n != 4)) continue; // only check blocks for file and directory i-nodes
+                for (Int32 i = 0; i < 8; i++)
+                {
+                    if ((p = iNode.addr[i]) == 0) continue;
+                    if ((p < isize + 2) || (p >= fsize)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} contains invalid block pointer (is {1:D0}, require {2:D0} <= n < {3:D0})", iNum, p, isize + 2, fsize);
+                    if (p >= volume.BlockCount) return Debug.WriteInfo(false, "UnixV6.Test: volume too small to contain i-node {0:D0} {1} block {2:D0}", iNum, ((iNode.flags & 0x1000) == 0) ? "data" : "indirect", p);
+                    if ((iNode.flags & 0x1000) != 0)
+                    {
+                        Block B = volume[p];
+                        for (Int32 j = 0; j < 256; j++)
+                        {
+                            if ((p = B.GetUInt16L(2 * j)) == 0) continue;
+                            if ((p < isize + 2) || (p >= fsize)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} contains invalid block pointer (is {1:D0}, require {2:D0} <= n < {3:D0})", iNum, p, isize + 2, fsize);
+                            if (p >= volume.BlockCount) return Debug.WriteInfo(false, "UnixV6.Test: volume too small to contain i-node {0:D0} {1} block {2:D0}", iNum, (i < 7) ? "data" : "indirect", p);
+                            if (i == 7)
+                            {
+                                Block B2 = volume[p];
+                                for (Int32 k = 0; k < 256; k++)
+                                {
+                                    if ((p = B2.GetUInt16L(2 * k)) == 0) continue;
+                                    if ((p < isize + 2) || (p >= fsize)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} contains invalid block pointer (is {1:D0}, require {2:D0} <= n < {3:D0})", iNum, p, isize + 2, fsize);
+                                    if (p >= volume.BlockCount) return Debug.WriteInfo(false, "UnixV6.Test: volume too small to contain i-node {0:D0} data block {1:D0}", iNum, p);
+                                }
+                            }
+                        }
+                    }
+                }
             }
             if (level == 3) return true;
 
             // level 4 - check directory structure (return file system size and type)
-            iNode = new InodeV6(volume, 1);
-            if ((iNode.flags & 0xe000) != 0xc000) return Debug.WriteInfo(false, "UnixV6.Test: root directory i-node type/used flags invalid (is 0x{0:x4}, require 0xc000)", iNode.flags & 0xe000);
-            UInt16[] IMap = new UInt16[isize * 16 + 1]; // inode usage map
+            iNode = new InodeV6(volume, ROOT_INUM);
+            if ((iNode.flags & 0xe000) != 0xc000) return Debug.WriteInfo(false, "UnixV6.Test: root directory i-node mode invalid (is 0x{0:x4}, require 0xcnnn)", iNode.flags);
+            UInt16[] IMap = new UInt16[isize * INOPB + 1]; // inode usage map
             Queue<Int32> DirList = new Queue<Int32>(); // queue of directories to examine
-            DirList.Enqueue((1 << 16) + 1); // parent inum in high word, directory inum in low word (root is its own parent)
+            DirList.Enqueue((ROOT_INUM << 16) + ROOT_INUM); // parent inum in high word, directory inum in low word (root is its own parent)
             while (DirList.Count != 0)
             {
                 Int32 dNum = DirList.Dequeue();
@@ -867,7 +891,7 @@ namespace FSX
                 Byte[] buf = ReadFile(new InodeV6(volume, dNum));
                 Boolean df = false;
                 Boolean ddf = false;
-                for (Int32 bp = 0; bp < buf.Length; bp += 16)
+                for (bp = 0; bp < buf.Length; bp += 16)
                 {
                     UInt16 iNum = Buffer.GetUInt16L(buf, bp);
                     if (iNum == 0) continue;
@@ -884,9 +908,9 @@ namespace FSX
                         IMap[iNum]++;
                         ddf = true;
                     }
-                    else if ((iNum < 2) || (iNum > isize * 16))
+                    else if ((iNum < 2) || (iNum > isize * INOPB))
                     {
-                        return Debug.WriteInfo(false, "UnixV6.Test: in directory i={0:D0}, entry \"{1}\" has invalid i-number (is {2:D0}, require 2 <= n <= {3:D0})", dNum, name, iNum, isize * 16);
+                        return Debug.WriteInfo(false, "UnixV6.Test: in directory i={0:D0}, entry \"{1}\" has invalid i-number (is {2:D0}, require 2 <= n <= {3:D0})", dNum, name, iNum, isize * INOPB);
                     }
                     else if (((iNode = new InodeV6(volume, iNum)).flags & 0x6000) == 0x4000) // directory
                     {
@@ -900,134 +924,102 @@ namespace FSX
                 if (!df) return Debug.WriteInfo(false, "UnixV6.Test: in directory i={0:D0}, entry \".\" is missing", dNum);
                 if (!ddf) return Debug.WriteInfo(false, "UnixV6.Test: in directory i={0:D0}, entry \"..\" is missing", dNum);
             }
-            IMap[1]--; // root directory has no parent, so back out the implied parent link
+            IMap[ROOT_INUM]--; // root directory has no parent, so back out the assumed parent link
             if (level == 4) return true;
 
             // level 5 - check file header allocation (return file system size and type)
-            for (UInt16 iNum = 1; iNum <= isize * 16; iNum++)
+            for (UInt16 iNum = 1; iNum <= isize * INOPB; iNum++)
             {
                 iNode = new InodeV6(volume, iNum);
-                if (((iNode.flags & 0x8000) == 0) && (IMap[iNum] != 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is marked free but has {1:D0} link(s)", iNum, IMap[iNum]);
-                if (((iNode.flags & 0x8000) != 0) && (IMap[iNum] == 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is marked used but has no links", iNum);
-                if (((iNode.flags & 0x8000) != 0) && (IMap[iNum] != iNode.nlinks)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} link count mismatch (is {1:D0}, expect {2:D0})", iNum, iNode.nlinks, IMap[iNum]);
+                n = iNode.flags & 0x8000;
+                if ((n == 0) && (IMap[iNum] != 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is free but has {1:D0} link(s)", iNum, IMap[iNum]);
+                if ((n != 0) && (IMap[iNum] == 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is used but has no links", iNum);
+                if ((n != 0) && (IMap[iNum] != iNode.nlinks)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} link count mismatch (is {1:D0}, expect {2:D0})", iNum, iNode.nlinks, IMap[iNum]);
             }
             // also check super-block free list
-            p = SB.GetInt16L(206);
-            for (Int32 i = 0; i < 2 * p; i += 2)
+            bp = 206;
+            n = SB.GetUInt16L(ref bp);
+            for (Int32 i = 0; i < n; i++)
             {
-                UInt16 iNum = SB.GetUInt16L(208 + i);
+                UInt16 iNum = SB.GetUInt16L(ref bp);
                 if (IMap[iNum] != 0) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is in super-block free list, but has {1:D0} link(s)", iNum, IMap[iNum]);
             }
             if (level == 5) return true;
 
             // level 6 - check data block allocation (return file system size and type)
-            UInt16[] BMap = new UInt16[size]; // block usage map
-            for (UInt16 iNum = 1; iNum <= isize * 16; iNum++)
+            UInt16[] BMap = new UInt16[fsize]; // block usage map
+            for (UInt16 iNum = 1; iNum <= isize * INOPB; iNum++)
             {
                 iNode = new InodeV6(volume, iNum);
-                if ((iNode.flags & 0x8000) == 0) continue; // unused i-nodes have no blocks
-                if ((iNode.flags & 0x2000) != 0) continue; // device i-nodes have no blocks
+                if ((iNode.flags & 0x8000) == 0) continue; // unused i-nodes have no blocks allocated
+                if ((iNode.flags & 0x2000) != 0) continue; // neither do device i-nodes
                 n = (iNode.size + 511) / 512; // number of blocks required for file
-                if ((iNode.flags & 0x1000) == 0)
+                // mark data blocks used
+                for (Int32 i = 0; i < n; i++)
                 {
-                    // i-node links to up to 8 direct blocks
-                    for (p = 0; p < n; p++)
-                    {
-                        Int32 b = iNode.addr[p]; // direct block
-                        if (b == 0) continue;
-                        if ((b < isize + 2) || (b >= size)) return Debug.WriteInfo(false, "UnixV6.Test: block {0:D0} of i-node {1:D0} falls outside volume block range (is {2:D0}, require {3:D0} <= n < {4:D0}", p, iNum, b, isize + 2, size);
-                        if (b > volume.BlockCount) Debug.WriteLine(1, "UnixV6.Test: WARNING: block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p, iNum, b, volume.BlockCount);
-                        if (BMap[b] != 0) return Debug.WriteInfo(false, "UnixV6.Test: block {0:D0} of i-node {1:D0} is also allocated to i-node {2:D0}", p, iNum, BMap[b]);
-                        BMap[b] = iNum;
-                    }
+                    if ((p = iNode[i]) == 0) continue;
+                    if (BMap[p] != 0) return Debug.WriteInfo(false, "UnixV6.Test: data block #{0:D0} ({1:D0}) of i-node {2:D0} is also allocated to i-node {3:D0}", i, p, iNum, BMap[p]);
+                    BMap[p] = iNum;
                 }
-                else
+                if ((iNode.flags & 0x1000) == 0) continue; // small files have no indirect blocks
+                // mark indirect blocks used
+                for (Int32 i = 0; i < 8; i++)
                 {
-                    // i-node links to up to 7 indirect blocks and 1 double-indirect
-                    for (p = 0; p < n; p++)
+                    if ((p = iNode.addr[i]) == 0) continue;
+                    if (BMap[p] != 0) return Debug.WriteInfo(false, "UnixV6.Test: indirect block {0:D0} of i-node {1:D0} is also allocated to i-node {2:D0}", p, iNum, BMap[p]);
+                    BMap[p] = iNum;
+                    if (i == 7)
                     {
-                        Int32 i = p / 256;
-                        if (i >= 7)
+                        // mark double-indirect blocks used
+                        Block B = volume[p];
+                        for (Int32 j = 0; j < 256; j++)
                         {
-                            Int32 d = iNode.addr[7]; // double-indirect block
-                            if (d == 0) continue;
-                            if ((d < isize + 2) || (d >= size)) return Debug.WriteInfo(false, "UnixV6.Test: double-indirect block of i-node {0:D0} falls outside volume block range (is {1:D0}, require {2:D0} <= n < {3:D0}", iNum, d, isize + 2, size);
-                            if (d > volume.BlockCount) return Debug.WriteInfo(false, "UnixV6.Test: double-indirect block of i-node {0:D0} falls outside image block range (is {1:D0}, expect n < {2:D0})", iNum, d, volume.BlockCount);
-                            i = volume[d].GetUInt16L((i - 7) * 2); // indirect block
+                            if ((p = B.GetUInt16L(2 * j)) == 0) continue;
+                            if (BMap[p] != 0) return Debug.WriteInfo(false, "UnixV6.Test: indirect block {0:D0} of i-node {1:D0} is also allocated to i-node {2:D0}", p, iNum, BMap[p]);
+                            BMap[p] = iNum;
                         }
-                        else
-                        {
-                            i = iNode.addr[i]; // indirect block
-                        }
-                        if (i == 0) continue;
-                        if ((i < isize + 2) || (i >= size)) return Debug.WriteInfo(false, "UnixV6.Test: indirect block {0:D0} of i-node {1:D0} falls outside volume block range (is {2:D0}, require {3:D0} <= n < {4:D0}", p / 256, iNum, i, isize + 2, size);
-                        if (i > volume.BlockCount) return Debug.WriteInfo(false, "UnixV6.Test: indirect block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p / 256, iNum, i, volume.BlockCount);
-                        Int32 b = volume[i].GetUInt16L((p % 256) * 2); // direct block
-                        if (b == 0) continue;
-                        if ((b < isize + 2) || (b >= size)) return Debug.WriteInfo(false, "UnixV6.Test: block {0:D0} of i-node {1:D0} falls outside volume block range (is {2:D0}, require {3:D0} <= n < {4:D0}", p, iNum, b, isize + 2, size);
-                        if (b > volume.BlockCount) Debug.WriteLine(1, "UnixV6.Test: WARNING: block {0:D0} of i-node {1:D0} falls outside image block range (is {2:D0}, expect n < {3:D0})", p, iNum, b, volume.BlockCount);
-                        if (BMap[b] != 0) return Debug.WriteInfo(false, "UnixV6.Test: block {0:D0} of i-node {1:D0} is also allocated to i-node {2:D0}", p, iNum, BMap[b]);
-                        BMap[b] = iNum;
-                    }
-                    Boolean f = false;
-                    for (p = 0; p < n; p += 256)
-                    {
-                        Int32 i = p / 256;
-                        if (i >= 7)
-                        {
-                            Int32 d = iNode.addr[7]; // double-indirect block
-                            if (d == 0) continue;
-                            i = volume[d].GetUInt16L((i - 7) * 2); // indirect block
-                            f = true;
-                        }
-                        else
-                        {
-                            i = iNode.addr[i]; // indirect block
-                        }
-                        if (i == 0) continue;
-                        if (BMap[i] != 0) return Debug.WriteInfo(false, "UnixV6.Test: indirect block {0:D0} of i-node {1:D0} is also allocated to i-node {2:D0}", i, iNum, BMap[i]);
-                        BMap[i] = iNum;
-                    }
-                    if (f)
-                    {
-                        Int32 i = iNode.addr[7];
-                        if (BMap[i] != 0) return Debug.WriteInfo(false, "UnixV6.Test: double-indirect block of i-node {0:D0} is also allocated to i-node {1:D0}", iNum, BMap[i]);
-                        BMap[i] = iNum;
                     }
                 }
             }
             // mark used blocks with 1
             for (Int32 i = 0; i < isize + 2; i++) BMap[i] = 1;
-            for (Int32 i = isize + 2; i < size; i++) if (BMap[i] != 0) BMap[i] = 1;
+            for (Int32 i = isize + 2; i < fsize; i++) if (BMap[i] != 0) BMap[i] = 1;
             // mark free blocks with 2
-            n = SB.GetInt16L(4); // number of blocks in super-block free block list
-            for (Int32 i = 0; i < 2 * n; i += 2)
+            bp = 4;
+            n = SB.GetUInt16L(ref bp); // number of blocks in super-block free block list
+            if ((p = SB.GetUInt16L(ref bp)) != 0) // free block chain next pointer
             {
-                p = SB.GetUInt16L(6 + i);
-                if (p == 0) continue;
-                if ((p < isize + 2) || (p >= size)) return Debug.WriteInfo(false, "UnixV6.Test: block {0:D0} in super-block free list falls outside volume block range (require {1:D0} <= n < {2:D0})", p, isize + 2, size);
-                if (BMap[p] != 0) return Debug.WriteInfo(false, "UnixV6.Test: block {0:D0} in super-block free list is allocated", p);
+                if (BMap[p] != 0) return Debug.WriteInfo(false, "UnixV6.Test: list block {0:D0} in super-block free list is allocated", p);
                 BMap[p] = 2;
             }
-            p = SB.GetUInt16L(6);
+            for (Int32 i = 1; i < n; i++)
+            {
+                Int32 q = SB.GetUInt16L(ref bp);
+                if (BMap[q] != 0) return Debug.WriteInfo(false, "UnixV6.Test: data block {0:D0} in super-block free list is allocated", q);
+                BMap[q] = 2;
+            }
+            // enumerate blocks in free block chain
             while (p != 0)
             {
-                if ((p < isize + 2) || (p >= size)) return Debug.WriteInfo(false, "UnixV6.Test: link block {0:D0} in free block chain falls outside volume block range (require {1:D0} <= n < {2:D0})", p, isize + 2, size);
-                if (p >= volume.BlockCount) return Debug.WriteInfo(false, "UnixV6.Test: link block {0:D0} in free block chain falls outside image block range (expect n < {1:D0})", p, volume.BlockCount);
                 Block B = volume[p];
-                n = B.GetUInt16L(0);
-                for (Int32 i = 0; i < 2 * n; i += 2)
+                bp = 0;
+                n = B.GetUInt16L(ref bp); // number of entries listed in this block
+                if ((p = B.GetUInt16L(ref bp)) != 0)
                 {
-                    p = B.GetUInt16L(2 + i);
-                    if (p == 0) continue;
-                    if ((p < isize + 2) || (p >= size)) return Debug.WriteInfo(false, "UnixV6.Test: block {0:D0} in free block chain falls outside volume block range (require {1:D0} <= n < {2:D0})", p, isize + 2, size);
-                    if (BMap[p] != 0) return Debug.WriteInfo(false, "UnixV6.Test: block {0:D0} in free block chain is allocated", p);
+                    if (BMap[p] != 0) return Debug.WriteInfo(false, "UnixV6.Test: list block {0:D0} in free block chain is allocated", p);
                     BMap[p] = 2;
+                }
+                for (Int32 i = 1; i < n; i++)
+                {
+                    Int32 q = B.GetUInt16L(ref bp);
+                    if ((q < isize + 2) || (q >= fsize)) return Debug.WriteInfo(false, "UnixV6.Test: data block {0:D0} in free block chain falls outside volume block range (require {1:D0} <= n < {2:D0})", q, isize + 2, fsize);
+                    if (BMap[q] != 0) return Debug.WriteInfo(false, "UnixV6.Test: data block {0:D0} in free block chain is allocated", q);
+                    BMap[q] = 2;
                 }
                 p = B.GetUInt16L(2);
             }
-            // unmarked blocks are lost
-            for (Int32 i = 0; i < size; i++)
+            // unmarked blocks are lost -- not allocated and not in free list
+            for (Int32 i = 0; i < fsize; i++)
             {
                 if (BMap[i] == 0) return Debug.WriteInfo(false, "UnixV6.Test: block {0:D0} is not allocated and not in free list", i);
             }

@@ -509,7 +509,11 @@ namespace FSX
                         String t = opt.Substring("type=".Length).Trim();
                         Int32 size;
                         Type type;
-                        if (Auto.GetInfo(t, out size, out type))
+                        if (String.Compare(t, "raw", StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            return new RawFS(new LBAVolume(s, s, data, 512));
+                        }
+                        else if (Auto.GetInfo(t, out size, out type))
                         {
                             if ((type == typeof(LBAVolume)) || (type == typeof(Volume)))
                             {

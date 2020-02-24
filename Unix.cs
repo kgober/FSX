@@ -149,6 +149,7 @@ namespace FSX
         }
     }
 
+
     partial class UnixV5 : FileSystem
     {
         protected class InodeV5 : Inode
@@ -174,14 +175,14 @@ namespace FSX
                 get
                 {
                     if ((flags & 0xe000) == 0x8000) return '-';
-                    if ((flags & 0xe000) == 0xa000) return 'c';
                     if ((flags & 0xe000) == 0xc000) return 'd';
+                    if ((flags & 0xe000) == 0xa000) return 'c';
                     if ((flags & 0xe000) == 0xe000) return 'b';
                     return ' ';
                 }
             }
 
-            public override string Mode
+            public override String Mode
             {
                 get
                 {
@@ -569,13 +570,12 @@ namespace FSX
             for (UInt16 iNum = 1; iNum <= isize * INOPB; iNum++)
             {
                 iNode = new InodeV5(volume, iNum);
-                n = (iNode.flags & 0x6000) >> 12;
-                if (((iNode.flags & 0x8000) != 0) && (iNode.nlinks == 0)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} is used but has zero link count", iNum);
-                //if (((iNode.flags & 0x8000) == 0) && (iNode.nlinks != 0)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
+                if ((iNode.Type != ' ') && (iNode.nlinks == 0)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} is used but has zero link count", iNum);
+                //if ((iNode.Type == ' ') && (iNode.nlinks != 0)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
                 if ((iNode.size < 0) || (iNode.size > 1048576)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} size invalid (is {1:D0}, require 0 <= n <= 1048576)", iNum, iNode.size);
-                if (((iNode.flags & 0x8000) == 0) && (iNode.size != 0)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} is free but has non-zero size {1:D0}", iNum, iNode.size);
+                if ((iNode.Type == ' ') && (iNode.size != 0)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} is free but has non-zero size {1:D0}", iNum, iNode.size);
                 if (((iNode.flags & 0x1000) == 0) && (iNode.size > 4096)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} size exceeds small file limit (is {1:D0}, require n <= 4096)", iNum, iNode.size);
-                if ((n != 0) && (n != 4)) continue; // only check blocks for file and directory i-nodes
+                if ((iNode.Type != '-') && (iNode.Type != 'd')) continue; // only check blocks for file and directory i-nodes
                 for (Int32 i = 0; i < 8; i++)
                 {
                     if ((p = iNode.addr[i]) == 0) continue;
@@ -597,7 +597,7 @@ namespace FSX
 
             // level 4 - check directory structure (return file system size and type)
             iNode = new InodeV5(volume, ROOT_INUM);
-            if ((iNode.flags & 0xe000) != 0xc000) return Debug.WriteInfo(false, "UnixV5.Test: root directory i-node mode invalid (is 0x{0:x4}, require 0xcnnn)", iNode.flags);
+            if (iNode.Type != 'd') return Debug.WriteInfo(false, "UnixV5.Test: root directory i-node mode invalid (is 0x{0:x4}, require 0xcnnn)", iNode.flags);
             UInt16[] IMap = new UInt16[isize * INOPB + 1]; // inode usage map
             Queue<Int32> DirList = new Queue<Int32>(); // queue of directories to examine
             DirList.Enqueue((ROOT_INUM << 16) + ROOT_INUM); // parent inum in high word, directory inum in low word (root is its own parent)
@@ -632,7 +632,7 @@ namespace FSX
                     {
                         return Debug.WriteInfo(false, "UnixV5.Test: in directory i={0:D0}, entry \"{1}\" has invalid i-number (is {2:D0}, require 2 <= n <= {3:D0})", dNum, name, iNum, isize * INOPB);
                     }
-                    else if (((iNode = new InodeV5(volume, iNum)).flags & 0x6000) == 0x4000) // directory
+                    else if ((iNode = new InodeV5(volume, iNum)).Type == 'd') // directory
                     {
                         DirList.Enqueue((dNum << 16) + iNum);
                     }
@@ -651,10 +651,9 @@ namespace FSX
             for (UInt16 iNum = 1; iNum <= isize * INOPB; iNum++)
             {
                 iNode = new InodeV5(volume, iNum);
-                n = iNode.flags & 0x8000;
-                if ((n == 0) && (IMap[iNum] != 0)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} is free but has {1:D0} link(s)", iNum, IMap[iNum]);
-                if ((n != 0) && (IMap[iNum] == 0)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} is used but has no links", iNum);
-                if ((n != 0) && (IMap[iNum] != iNode.nlinks)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} link count mismatch (is {1:D0}, expect {2:D0})", iNum, iNode.nlinks, IMap[iNum]);
+                if ((iNode.Type == ' ') && (IMap[iNum] != 0)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} is free but has {1:D0} link(s)", iNum, IMap[iNum]);
+                if ((iNode.Type != ' ') && (IMap[iNum] == 0)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} is used but has no links", iNum);
+                if ((iNode.Type != ' ') && (IMap[iNum] != iNode.nlinks)) return Debug.WriteInfo(false, "UnixV5.Test: i-node {0:D0} link count mismatch (is {1:D0}, expect {2:D0})", iNum, iNode.nlinks, IMap[iNum]);
             }
             // also check super-block free list
             bp = 206;
@@ -671,8 +670,7 @@ namespace FSX
             for (UInt16 iNum = 1; iNum <= isize * INOPB; iNum++)
             {
                 iNode = new InodeV5(volume, iNum);
-                if ((iNode.flags & 0x8000) == 0) continue; // unused i-nodes have no blocks allocated
-                if ((iNode.flags & 0x2000) != 0) continue; // neither do device i-nodes
+                if ((iNode.Type != '-') && (iNode.Type != 'd')) continue; // only file and directory i-nodes have blocks allocated
                 n = (iNode.size + 511) / 512; // number of blocks required for file
                 // mark data blocks used
                 for (Int32 i = 0; i < n; i++)
@@ -838,14 +836,13 @@ namespace FSX
             for (UInt16 iNum = 1; iNum <= isize * INOPB; iNum++)
             {
                 iNode = new InodeV6(volume, iNum);
-                n = (iNode.flags & 0x6000) >> 12;
-                if (((iNode.flags & 0x8000) != 0) && (iNode.nlinks == 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is used but has zero link count", iNum);
-                //if (((iNode.flags & 0x8000) == 0) && (iNode.nlinks != 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
+                if ((iNode.Type != ' ') && (iNode.nlinks == 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is used but has zero link count", iNum);
+                //if ((iNode.Type == ' ') && (iNode.nlinks != 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
                 // since iNode.size is a 24-bit number, the below test can't actually ever fail
                 if ((iNode.size < 0) || (iNode.size > 16777215)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} size invalid (is {1:D0}, require 0 <= n <= 16777215)", iNum, iNode.size);
-                if (((iNode.flags & 0x8000) == 0) && (iNode.size != 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is free but has non-zero size {1:D0}", iNum, iNode.size);
+                if ((iNode.Type == ' ') && (iNode.size != 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is free but has non-zero size {1:D0}", iNum, iNode.size);
                 if (((iNode.flags & 0x1000) == 0) && (iNode.size > 4096)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} size exceeds small file limit (is {1:D0}, require n <= 4096)", iNum, iNode.size);
-                if ((n != 0) && (n != 4)) continue; // only check blocks for file and directory i-nodes
+                if ((iNode.Type != '-') && (iNode.Type != 'd')) continue; // only check blocks for file and directory i-nodes
                 for (Int32 i = 0; i < 8; i++)
                 {
                     if ((p = iNode.addr[i]) == 0) continue;
@@ -877,7 +874,7 @@ namespace FSX
 
             // level 4 - check directory structure (return file system size and type)
             iNode = new InodeV6(volume, ROOT_INUM);
-            if ((iNode.flags & 0xe000) != 0xc000) return Debug.WriteInfo(false, "UnixV6.Test: root directory i-node mode invalid (is 0x{0:x4}, require 0xcnnn)", iNode.flags);
+            if (iNode.Type != 'd') return Debug.WriteInfo(false, "UnixV6.Test: root directory i-node mode invalid (is 0x{0:x4}, require 0xcnnn)", iNode.flags);
             UInt16[] IMap = new UInt16[isize * INOPB + 1]; // inode usage map
             Queue<Int32> DirList = new Queue<Int32>(); // queue of directories to examine
             DirList.Enqueue((ROOT_INUM << 16) + ROOT_INUM); // parent inum in high word, directory inum in low word (root is its own parent)
@@ -912,7 +909,7 @@ namespace FSX
                     {
                         return Debug.WriteInfo(false, "UnixV6.Test: in directory i={0:D0}, entry \"{1}\" has invalid i-number (is {2:D0}, require 2 <= n <= {3:D0})", dNum, name, iNum, isize * INOPB);
                     }
-                    else if (((iNode = new InodeV6(volume, iNum)).flags & 0x6000) == 0x4000) // directory
+                    else if ((iNode = new InodeV6(volume, iNum)).Type == 'd') // directory
                     {
                         DirList.Enqueue((dNum << 16) + iNum);
                     }
@@ -931,10 +928,9 @@ namespace FSX
             for (UInt16 iNum = 1; iNum <= isize * INOPB; iNum++)
             {
                 iNode = new InodeV6(volume, iNum);
-                n = iNode.flags & 0x8000;
-                if ((n == 0) && (IMap[iNum] != 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is free but has {1:D0} link(s)", iNum, IMap[iNum]);
-                if ((n != 0) && (IMap[iNum] == 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is used but has no links", iNum);
-                if ((n != 0) && (IMap[iNum] != iNode.nlinks)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} link count mismatch (is {1:D0}, expect {2:D0})", iNum, iNode.nlinks, IMap[iNum]);
+                if ((iNode.Type == ' ') && (IMap[iNum] != 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is free but has {1:D0} link(s)", iNum, IMap[iNum]);
+                if ((iNode.Type != ' ') && (IMap[iNum] == 0)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} is used but has no links", iNum);
+                if ((iNode.Type != ' ') && (IMap[iNum] != iNode.nlinks)) return Debug.WriteInfo(false, "UnixV6.Test: i-node {0:D0} link count mismatch (is {1:D0}, expect {2:D0})", iNum, iNode.nlinks, IMap[iNum]);
             }
             // also check super-block free list
             bp = 206;
@@ -951,8 +947,7 @@ namespace FSX
             for (UInt16 iNum = 1; iNum <= isize * INOPB; iNum++)
             {
                 iNode = new InodeV6(volume, iNum);
-                if ((iNode.flags & 0x8000) == 0) continue; // unused i-nodes have no blocks allocated
-                if ((iNode.flags & 0x2000) != 0) continue; // neither do device i-nodes
+                if ((iNode.Type != '-') && (iNode.Type != 'd')) continue; // only file and directory i-nodes have blocks allocated
                 n = (iNode.size + 511) / 512; // number of blocks required for file
                 // mark data blocks used
                 for (Int32 i = 0; i < n; i++)
@@ -1059,8 +1054,8 @@ namespace FSX
                 get
                 {
                     if ((flags & 0xf000) == 0x8000) return '-';
-                    if ((flags & 0xe000) == 0x2000) return 'c';
                     if ((flags & 0xf000) == 0x4000) return 'd';
+                    if ((flags & 0xe000) == 0x2000) return 'c';
                     if ((flags & 0xe000) == 0x6000) return 'b';
                     if ((flags & 0xf000) == 0x0000) return ' ';
                     return '\0';
@@ -1206,15 +1201,14 @@ namespace FSX
             for (UInt16 iNum = 1; iNum <= (s_isize - 2) * INOPB; iNum++)
             {
                 iNode = new InodeV7(volume, iNum);
-                n = (iNode.flags & 0xf000) >> 12;
-                if ((n != 0) && (n != 8) && (n != 4) && ((n & 10) != 2)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} mode 0{1} (octal) invalid", iNum, Convert.ToString(iNode.flags, 8));
+                if (iNode.Type == '\0') return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} mode 0{1} (octal) invalid", iNum, Convert.ToString(iNode.flags, 8));
                 if (iNode.nlinks < 0) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} link count invalid (is {1:D0}, require n >= 0)", iNum, iNode.nlinks);
                 // special case: i-node 1 is used but not linked
-                if ((n != 0) && (iNode.nlinks == 0) && (iNum > 1)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} is used but has zero link count", iNum);
-                if ((n == 0) && (iNode.nlinks != 0)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
+                if ((iNode.Type != ' ') && (iNode.nlinks == 0) && (iNum > 1)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} is used but has zero link count", iNum);
+                if ((iNode.Type == ' ') && (iNode.nlinks != 0)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} is free but has non-zero link count {1:D0}", iNum, iNode.nlinks);
                 if ((iNode.size < 0) || (iNode.size > 1082201088)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} size invalid (is {1:D0}, require 0 <= n <= 1082201088)", iNum, iNode.size);
-                if ((n == 0) && (iNode.size != 0)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} is free but has non-zero size {1:D0}", iNum, iNode.size);
-                if ((n != 8) && (n != 4)) continue; // only check blocks for file and directory i-nodes
+                if ((iNode.Type == ' ') && (iNode.size != 0)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} is free but has non-zero size {1:D0}", iNum, iNode.size);
+                if ((iNode.Type != '-') && (iNode.Type != 'd')) continue; // only check blocks for file and directory i-nodes
                 // verify validity of i-node direct block pointers
                 for (Int32 i = 0; i < 10; i++)
                 {
@@ -1287,7 +1281,7 @@ namespace FSX
 
             // level 4 - check directory structure (return file system size and type)
             iNode = new InodeV7(volume, ROOT_INUM);
-            if ((iNode.flags & 0xf000) != 0x4000) return Debug.WriteInfo(false, "UnixV7.Test: root directory i-node mode invalid (is 0x{0:x4}, require 0x4nnn)", iNode.flags);
+            if (iNode.Type != 'd') return Debug.WriteInfo(false, "UnixV7.Test: root directory i-node mode invalid (is 0x{0:x4}, require 0x4nnn)", iNode.flags);
             UInt16[] IMap = new UInt16[(s_isize - 2) * INOPB + 1]; // inode usage map
             Queue<Int32> DirList = new Queue<Int32>(); // queue of directories to examine
             DirList.Enqueue((ROOT_INUM << 16) + ROOT_INUM); // parent inum in high word, directory inum in low word (root is its own parent)
@@ -1341,10 +1335,9 @@ namespace FSX
             for (UInt16 iNum = 1; iNum <= (s_isize - 2) * INOPB; iNum++)
             {
                 iNode = new InodeV7(volume, iNum);
-                n = (iNode.flags & 0xf000) >> 12;
-                if ((n == 0) && (IMap[iNum] != 0)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} is free but has {1:D0} link(s)", iNum, IMap[iNum]);
-                if ((n != 0) && (IMap[iNum] == 0)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} is used but has no links", iNum);
-                if ((n != 0) && (IMap[iNum] != iNode.nlinks)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} link count mismatch (is {1:D0}, expect {2:D0})", iNum, iNode.nlinks, IMap[iNum]);
+                if ((iNode.Type == ' ') && (IMap[iNum] != 0)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} is free but has {1:D0} link(s)", iNum, IMap[iNum]);
+                if ((iNode.Type != ' ') && (IMap[iNum] == 0)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} is used but has no links", iNum);
+                if ((iNode.Type != ' ') && (IMap[iNum] != iNode.nlinks)) return Debug.WriteInfo(false, "UnixV7.Test: i-node {0:D0} link count mismatch (is {1:D0}, expect {2:D0})", iNum, iNode.nlinks, IMap[iNum]);
             }
             // also check super-block free list
             bp = 208;
@@ -1361,9 +1354,7 @@ namespace FSX
             for (UInt16 iNum = 1; iNum <= (s_isize - 2) * INOPB; iNum++)
             {
                 iNode = new InodeV7(volume, iNum);
-                n = (iNode.flags & 0xf000) >> 12;
-                if (n == 0) continue; // unused i-nodes have no blocks allocated
-                if ((n & 2) != 0) continue; // neither do device i-nodes
+                if ((iNode.Type != '-') && (iNode.Type != 'd')) continue; // only file and directory i-nodes have blocks allocated
                 n = (iNode.size + 511) / 512; // number of blocks required for file
                 // mark data blocks used
                 for (Int32 i = 0; i < n; i++)

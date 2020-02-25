@@ -38,19 +38,47 @@ namespace FSX
             return true;
         }
 
-        public static Byte[] Decompress(Byte[] data)
+        public class Decompressor
         {
-            DateTime t1 = DateTime.Now;
-            GZipStream i = new GZipStream(new MemoryStream(data), CompressionMode.Decompress);
-            MemoryStream o = new MemoryStream();
-            Byte[] buf = new Byte[4096];
-            Int32 n;
-            while ((n = i.Read(buf, 0, 4096)) != 0) o.Write(buf, 0, n);
-            buf = o.ToArray();
-            DateTime t2 = DateTime.Now;
-            TimeSpan td = t2 - t1;
-            Debug.WriteLine(9, "GZip.Decompress: {0:D0} -> {1:D0} bytes in {2:F3} ms", data.Length, buf.Length, td.TotalMilliseconds);
-            return buf;
+            private Byte[] mData;   // compressed data
+            private Int32 mSize;    // uncompressed size
+            private Byte[] mCache;  // uncompressed data
+
+            public Decompressor(Byte[] data)
+            {
+                mData = data;
+                mSize = -2;
+            }
+
+            public Int32 GetByteCount()
+            {
+                if (mSize != -2) return mSize;
+                if (!HasHeader(mData)) return (mSize = -1);
+                try
+                {
+                    GZipStream i = new GZipStream(new MemoryStream(mData), CompressionMode.Decompress);
+                    MemoryStream o = new MemoryStream();
+                    Byte[] buf = new Byte[4096];
+                    Int32 n;
+                    while ((n = i.Read(buf, 0, 4096)) != 0) o.Write(buf, 0, n);
+                    mCache = o.ToArray();
+                    return (mSize = mCache.Length);
+                }
+                catch
+                {
+                    return (mSize = -1);
+                }
+            }
+
+            public Byte[] GetBytes()
+            {
+                Int32 n = GetByteCount();
+                if (n == -1) return null;
+                Byte[] buf = new Byte[n];
+                if (n == 0) return buf;
+                Buffer.Copy(mCache, 0, buf, 0, n);
+                return buf;
+            }
         }
     }
 }

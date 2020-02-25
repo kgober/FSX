@@ -319,7 +319,12 @@ namespace FSX
                     Byte[] data = v.FS.ReadFile(arg);
                     if (data != null)
                     {
-                        if (Compress.HasHeader(data))
+                        if (GZip.HasHeader(data))
+                        {
+                            GZip.Decompressor D = new GZip.Decompressor(data);
+                            if (D.GetByteCount() != -1) data = D.GetBytes();
+                        }
+                        else if (Compress.HasHeader(data))
                         {
                             Compress.Decompressor D = new Compress.Decompressor(data);
                             if (D.GetByteCount() != -1) data = D.GetBytes();
@@ -533,14 +538,22 @@ namespace FSX
             if ((path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)) && (GZip.HasHeader(data)))
             {
                 // gzip compressed data
-                data = GZip.Decompress(data);
-                path = path.Substring(0, path.Length - 3);
+                GZip.Decompressor D = new GZip.Decompressor(data);
+                if (D.GetByteCount() != -1)
+                {
+                    data = D.GetBytes();
+                    path = path.Substring(0, path.Length - 3);
+                }
             }
             if ((path.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase)) && (GZip.HasHeader(data)))
             {
                 // gzip compressed tar file
-                data = GZip.Decompress(data);
-                path = String.Concat(path.Substring(0, path.Length - 3), "tar");
+                GZip.Decompressor D = new GZip.Decompressor(data);
+                if (D.GetByteCount() != -1)
+                {
+                    data = D.GetBytes();
+                    path = String.Concat(path.Substring(0, path.Length - 3), "tar");
+                }
             }
             if ((path.EndsWith(".Z", StringComparison.OrdinalIgnoreCase)) && (Compress.HasHeader(data)))
             {

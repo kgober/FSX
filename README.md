@@ -2,7 +2,7 @@
 File System Exchange is a utility to access data stored in disk images, using an interactive command-line style interface.  The implementation language is C#, targeting the Microsoft .NET Framework 2.0.
 
 Currently the following types of volumes are supported:
-* Unix v5 and v6
+* Unix v5, v6, and v7
 * Unix tar files
 * RT-11
 * Files-11 (a.k.a. ODS-1, the RSX-11 file system format)
@@ -10,6 +10,7 @@ Currently the following types of volumes are supported:
 
 The following storage formats are supported:
 * ImageDisk (.IMD) files
+* TeleDisk (.TD0) files
 * gzip (.gz) compressed files
 * Compress (.Z) compressed files
 * .D64/.D67/.D80/.D82 files
@@ -30,8 +31,10 @@ To use FSX, simply run it from a console window such as the Windows Command Prom
 * dir|ls [id:]pattern - show directory
 * dumpdir [id:]pattern - show raw directory data
 * type|cat [id:]file - show file as text
+* zcat [id:]file - show compressed file as text
 * dump|od [id:]file - show file as a hex dump
 * save|write [id:]file pathname - export image of file 'file' to file 'pathname'
+* out pathname - redirect output to 'pathname' (omit pathname to reset)
 * verb|verbose n - set verbosity level (default 0)
 * deb|debug n - set debug level (default 0)
 * source|. pathname - read commands from 'pathname'

@@ -58,10 +58,6 @@
 //   by Timothy Bell (http://hdl.handle.net/10092/8411)
 
 
-// Future Improvements / To Do
-// simplify GetPosition()
-
-
 using System;
 
 namespace FSX
@@ -180,28 +176,26 @@ namespace FSX
 
             private Int32 GetPosition(BitReaderB reader)
             {
-                Int32 pos = -1;
-                Int32 i = reader.Next(4), j = 0, l = 0;
-                switch (i)
+                switch (reader.Next(4))
                 {
-                    case 0: l = 5; j = reader.Next(l); pos = 0x000 | j; break;
-                    case 1: l = 5; j = reader.Next(l); pos = 0x020 | j; break;
-                    case 2: l = 6; j = reader.Next(l); pos = 0x040 | j; break;
-                    case 3: l = 6; j = reader.Next(l); pos = 0x080 | j; break;
-                    case 4: l = 6; j = reader.Next(l); pos = 0x0c0 | j; break;
-                    case 5: l = 7; j = reader.Next(l); pos = 0x100 | j; break;
-                    case 6: l = 7; j = reader.Next(l); pos = 0x180 | j; break;
-                    case 7: l = 7; j = reader.Next(l); pos = 0x200 | j; break;
-                    case 8: l = 7; j = reader.Next(l); pos = 0x280 | j; break;
-                    case 9: l = 8; j = reader.Next(l); pos = 0x300 | j; break;
-                    case 10: l = 8; j = reader.Next(l); pos = 0x400 | j; break;
-                    case 11: l = 8; j = reader.Next(l); pos = 0x500 | j; break;
-                    case 12: l = 9; j = reader.Next(l); pos = 0x600 | j; break;
-                    case 13: l = 9; j = reader.Next(l); pos = 0x800 | j; break;
-                    case 14: l = 9; j = reader.Next(l); pos = 0xa00 | j; break;
-                    case 15: l = 10; j = reader.Next(l); pos = 0xc00 | j; break;
+                    case 0: return 0x000 | reader.Next(5);
+                    case 1: return 0x020 | reader.Next(5);
+                    case 2: return 0x040 | reader.Next(6);
+                    case 3: return 0x080 | reader.Next(6);
+                    case 4: return 0x0c0 | reader.Next(6);
+                    case 5: return 0x100 | reader.Next(7);
+                    case 6: return 0x180 | reader.Next(7);
+                    case 7: return 0x200 | reader.Next(7);
+                    case 8: return 0x280 | reader.Next(7);
+                    case 9: return 0x300 | reader.Next(8);
+                    case 10: return 0x400 | reader.Next(8);
+                    case 11: return 0x500 | reader.Next(8);
+                    case 12: return 0x600 | reader.Next(9);
+                    case 13: return 0x800 | reader.Next(9);
+                    case 14: return 0xa00 | reader.Next(9);
+                    case 15: return 0xc00 | reader.Next(10);
                 }
-                return pos;
+                return -1;
             }
 
             private void InitTree()

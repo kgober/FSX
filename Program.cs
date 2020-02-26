@@ -37,7 +37,7 @@
 // improve 'force' mount of damaged or unrecognizable volumes
 // allow demand-loading from non-compressed image files rather than pre-loading entire file
 // add support for CP/M images
-// add support for ISO-9660 volumes
+// add support for ISO-9660 file systems
 // add support for 7-Zip files (.7z)
 // add support for ZIP files
 

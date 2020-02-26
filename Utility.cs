@@ -20,12 +20,20 @@
 // SOFTWARE.
 
 
+// Future Improvements / To Do
+// support more types of CRCs
+
+
 using System;
 using System.Text;
 
 namespace FSX
 {
     // BitReaderB / BitReaderL - utility classes to read bit streams from byte arrays
+    //
+    // BitReaderB reads the most significant bit of each byte first (i.e. it assumes
+    // that bits were packed into bytes left-to-right.).  BitReaderL reads the least
+    // significant bit of each byte first (i.e. right-to-left).
 
     class BitReaderB
     {
@@ -102,6 +110,13 @@ namespace FSX
 
     
     // Buffer class - utility functions to access data from byte arrays
+    //
+    // Functions that end with 'B' assume the byte arrays are big-endian (more
+    // significant bytes precede less significant bytes).  Functions that end
+    // with 'L' assume the byte arrays are little-endian (less significant bytes
+    // precede more significant bytes).  The 'P' suffix denotes PDP-11 byte
+    // order, in which a 32-bit value is written high word first, but each
+    // word is stored little-endian.
 
     class Buffer
     {
@@ -470,6 +485,11 @@ namespace FSX
 
 
     // Debug class - utility functions to handle debug output
+    //
+    // Write... functions whose first argument is not 'messageLevel' or 'format'
+    // are intended as helpers allowing code such as "if (test) return value;"
+    // to be converted directly into "if (test) return Write...(value, ...);"
+    // without needing to add curly braces to form a compound statement.
 
     class Debug
     {

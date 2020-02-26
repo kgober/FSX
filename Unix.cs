@@ -35,60 +35,12 @@
 // can be (mostly) differentiated by looking at the last indirect block.
 //
 // The Unix v7 file system format increases block pointers to 24 bits, and
-// increases the size of an i-node to contain additional block pointers.  In
-// place of a 'large file' flag, the i-node block pointers are treated the
-// same for all files: 10 direct pointers, then 1 indirect, 1 double-indirect,
+// increases the size of an i-node to contain additional block pointers.  The
+// 'large file' flag is removed; i-node block pointers are interpreted the same
+// way for all files: 10 direct pointers, then 1 indirect, 1 double-indirect,
 // and 1 triple-indirect pointer.  Each indirect block contains 128 4-byte
 // pointers, so the maximum file size increases to:
 //   512 * (10 + 128 + 128*128 + 128*128*128) = 1082201087 bytes
-//
-// v5/v6 super block
-//  0   isize - i-list size (in blocks)
-//  2   fsize - file system size
-//  4   nfree - number of free blocks listed in superblock (0-100)
-//  6   free  - free block list
-//  206 ninode - number of fre einodes listed in superblock (0-100)
-//  208 inode - free inode list
-//  408 flock
-//  409 ilock
-//  410 fmod
-//  411 time
-//  415
-//
-// v5/v6 i-node flags
-//  0x8000  allocated / in use
-//  0x6000  file type (file=0x0000 cdev=0x2000 dir=0x4000 bdev=0x6000)
-//  0x1000  large file (addr[] has indirect blocks, instead of direct)
-//  0x0800  setuid
-//  0x0400  setgid
-//  0x01c0  owner permissions (r=0x0100 w=0x0080 x=0x0040)
-//  0x0038  group permissions (r=0x0020 w=0x0010 x=0x0008)
-//  0x0007  world permissions (r=0x0004 w=0x0002 x=0x0001)
-//
-// v7 super block
-//  0   s_isize - reserved size (boot + superblock + inodes)
-//  2   s_fsize - file system size
-//  6   s_nfree - number of free blocks listed in superblock (0-50)
-//  8   s_free  - free block list
-//  208 s_ninode - number of free inodes listed in superblock (0-100)
-//  210 s_ifree - free inode list
-//  410 s_flock
-//  411 s_ilock
-//  412 s_fmod
-//  413 s_ronly
-//  414 s_time
-//  418
-//
-// v7 i-node
-//  0   di_mode     0x0fff mode flags, 0xf000 type mask, types: 8=file, 4=dir, 2=cdev, 6=bdev, 3=mcdev, 7=mbdev
-//  2   di_nlink
-//  4   di_uid
-//  6   di_gid
-//  8   di_size
-//  12  di_addr
-//  52  di_atime
-//  56  di_mtime
-//  60  di_ctime
 
 
 // Improvements / To Do
@@ -149,6 +101,29 @@ namespace FSX
         }
     }
 
+
+    // v5/v6 super block
+    //  0   isize - i-list size (in blocks)
+    //  2   fsize - file system size
+    //  4   nfree - number of free blocks listed in superblock (0-100)
+    //  6   free  - free block list
+    //  206 ninode - number of fre einodes listed in superblock (0-100)
+    //  208 inode - free inode list
+    //  408 flock
+    //  409 ilock
+    //  410 fmod
+    //  411 time
+    //  415
+    //
+    // v5/v6 i-node flags
+    //  0x8000  allocated / in use
+    //  0x6000  file type (file=0x0000 cdev=0x2000 dir=0x4000 bdev=0x6000)
+    //  0x1000  large file (addr[] has indirect blocks, instead of direct)
+    //  0x0800  setuid
+    //  0x0400  setgid
+    //  0x01c0  owner permissions (r=0x0100 w=0x0080 x=0x0040)
+    //  0x0038  group permissions (r=0x0020 w=0x0010 x=0x0008)
+    //  0x0007  world permissions (r=0x0004 w=0x0002 x=0x0001)
 
     partial class UnixV5 : FileSystem
     {
@@ -1023,6 +998,32 @@ namespace FSX
             return false;
         }
     }
+
+
+    // v7 super block
+    //  0   s_isize - reserved size (boot + superblock + inodes)
+    //  2   s_fsize - file system size
+    //  6   s_nfree - number of free blocks listed in superblock (0-50)
+    //  8   s_free  - free block list
+    //  208 s_ninode - number of free inodes listed in superblock (0-100)
+    //  210 s_ifree - free inode list
+    //  410 s_flock
+    //  411 s_ilock
+    //  412 s_fmod
+    //  413 s_ronly
+    //  414 s_time
+    //  418
+    //
+    // v7 i-node
+    //  0   di_mode     0x0fff mode flags, 0xf000 type mask, types: 8=file, 4=dir, 2=cdev, 6=bdev, 3=mcdev, 7=mbdev
+    //  2   di_nlink
+    //  4   di_uid
+    //  6   di_gid
+    //  8   di_size
+    //  12  di_addr
+    //  52  di_atime
+    //  56  di_mtime
+    //  60  di_ctime
 
     partial class UnixV7 : UnixV5
     {

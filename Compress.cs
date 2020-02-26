@@ -34,9 +34,10 @@
 //     a number of 10-byte blocks each containing 8 packed 10-bit LZW code words
 //     a number of 11-byte blocks each containing 8 packed 11-bit LZW code words
 //     ...
-//     final block of code words ends at the earliest 1-byte boundary (there is no EOF code word)
-//     when code size resets or changes, remaining code words in the current block are discarded.
-//     when a code word spans more than one byte, least significant bits are in first byte
+//
+//   Final block of code words ends at the earliest 1-byte boundary (there is no EOF code word).
+//   When code size resets or changes, remaining code words in the current block are discarded.
+//   Within blocks, bits are packed into bytes least-significant-bit first (right to left).
 //
 // LZW compression/decompression algorithm:
 //   https://marknelson.us/posts/1989/10/01/lzw-data-compression.html

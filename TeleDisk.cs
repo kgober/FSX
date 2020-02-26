@@ -26,6 +26,7 @@
 
 
 // Future Improvements / To Do
+// check other CRCs (currently only header CRC is verified)
 // allow source to be taken as a pathname if data is null
 // support multi-file images (.TD1, etc.)
 

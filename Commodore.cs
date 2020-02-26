@@ -26,6 +26,7 @@ using System.Text;
 namespace FSX
 {
     // PETSCII graphics character set (upper case and graphics)
+
     class PETSCII0 : Encoding
     {
         public static readonly PETSCII0 Encoding = new PETSCII0();
@@ -161,6 +162,7 @@ namespace FSX
     }
 
     // PETSCII text character set (lower case and upper case)
+
     class PETSCII1 : PETSCII0
     {
         public static new readonly PETSCII1 Encoding = new PETSCII1();
@@ -195,6 +197,7 @@ namespace FSX
 
     // .D64 image file format (Commodore 4040/1540/1541)
     // (also recognizes .D67 files, in case they're misnamed)
+
     class D64
     {
         public static Boolean IsValid(Byte[] data)
@@ -241,6 +244,7 @@ namespace FSX
     }
 
     // .D67 image file format (Commodore 2040/3040 with DOS 1 ROMs)
+
     class D67
     {
         public static Boolean IsValid(Byte[] data)
@@ -257,6 +261,7 @@ namespace FSX
     }
 
     // .D80 image file format (Commodore 8050)
+
     class D80
     {
         public static Boolean IsValid(Byte[] data)
@@ -294,6 +299,7 @@ namespace FSX
     }
 
     // .D82 image file format (Commodore 8250)
+
     class D82
     {
         public static Boolean IsValid(Byte[] data)

@@ -20,7 +20,16 @@
 // SOFTWARE.
 
 
+// FAT File System Structure
+//
 // http://www.ecma-international.org/publications/files/ECMA-ST/Ecma-107.pdf
+
+
+// Future Improvements / To Do
+// improve FAT12 ListDir
+// implement FAT12 ChangeDir
+// implement FAT12 ReadFile/ListFile/DumpFile
+// add support for FAT16
 
 
 using System;

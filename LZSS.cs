@@ -52,6 +52,14 @@
 //
 // Code words are read most-significant-bit first; when a code word spans more than
 // one byte, the most significant bits are in the first byte.
+//
+// For more information about LZSS compression, see:
+// "A Unifying Theory and Improvements for Existing Approaches to Text Compression"
+//   by Timothy Bell (http://hdl.handle.net/10092/8411)
+
+
+// Future Improvements / To Do
+// simplify GetPosition()
 
 
 using System;
@@ -99,14 +107,14 @@ namespace FSX
                 Int32 n;
                 while ((n = GetSymbol(R)) != -1)
                 {
-                    UpdateNode(n);
+                    UpdateNode(n); // this is what makes the coding "Adaptive"
                     if (n < 256)
                     {
-                        ct++;
+                        ct++; // symbol encodes a single byte
                     }
                     else
                     {
-                        ct += n - (256 - 3);
+                        ct += n - (256 - 3); // symbol encodes a length
                         if (GetPosition(R) == -1) return (mSize = -1);
                     }
                 }
@@ -129,17 +137,17 @@ namespace FSX
                 Int32 n;
                 while ((n = GetSymbol(R)) != -1)
                 {
-                    UpdateNode(n);
+                    UpdateNode(n); // this is what makes the coding "Adaptive"
                     if (n < 256)
                     {
-                        data[q++] = (Byte)n;
+                        data[q++] = (Byte)n; // symbol encodes a single byte
                         buf[p++] = (Byte)n;
                         if (p >= buf.Length) p = 0;
                     }
                     else
                     {
-                        n -= (256 - 3);
-                        Int32 m = GetPosition(R);
+                        n -= (256 - 3); // symbol encodes a length
+                        Int32 m = GetPosition(R); // (position follows)
                         Int32 k = p - 1 - m;
                         if (k < 0) k += buf.Length;
                         for (Int32 i = 0; i < n; i++)

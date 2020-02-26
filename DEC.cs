@@ -26,6 +26,7 @@ using System.Text;
 namespace FSX
 {
     // DEC Radix-50 encoding for 16-bit words (PDP-11, VAX)
+
     static class Radix50
     {
         static Char[] T = {

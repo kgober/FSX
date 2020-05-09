@@ -83,11 +83,15 @@ namespace FSX
         {
             public FileSystem.TestDelegate Test;
             public Volume Volume;
+            public Int32 Size;
+            public Type Type;
 
-            public Entry(FileSystem.TestDelegate test, Volume volume)
+            public Entry(FileSystem.TestDelegate test, Volume volume, Int32 size, Type type)
             {
                 Test = test;
                 Volume = volume;
+                Size = size;
+                Type = type;
             }
         }
 
@@ -144,7 +148,7 @@ namespace FSX
                     if (test(image, level, out size, out type))
                     {
                         Debug.WriteLine(2, "Pass: {0} level {1:D0}", test.Method.DeclaringType.Name, level);
-                        L.Add(new Entry(test, image));
+                        L.Add(new Entry(test, image, size, type));
                         continue;
                     }
                     if ((size != -1) && (size != image.BlockSize) && ((size % image.BlockSize) == 0))
@@ -153,7 +157,7 @@ namespace FSX
                         if (test(volume, level, out size, out type))
                         {
                             Debug.WriteLine(2, "Pass: {0} level {1:D0} (with ClusteredVolume)", test.Method.DeclaringType.Name, level);
-                            L.Add(new Entry(test, volume));
+                            L.Add(new Entry(test, volume, size, type));
                             continue;
                         }
                     }
@@ -178,7 +182,12 @@ namespace FSX
                             volume = e.Volume;
                             size = s;
                             type = (level >= 2) ? t : e.Test.Method.DeclaringType;
-                            L2.Add(((level > 1) && (size > volume.BlockCount)) ? new Entry(e.Test, volume = new PaddedVolume(volume, size - volume.BlockCount)) : e);
+                            if ((level > 1) && (size != -1) && (size > volume.BlockCount))
+                            {
+                                // grow volume if it appears that empty trailing blocks were trimmed
+                                volume = new PaddedVolume(volume, size - volume.BlockCount);
+                            }
+                            L2.Add(new Entry(e.Test, volume, size, type));
                         }
                     }
                     if ((level > 1) && (L2.Count == 1))
@@ -195,9 +204,22 @@ namespace FSX
                     }
                     L = L2;
                 }
-                // if all tests passed for multiple types, just choose the last one
+                // if all tests passed for multiple types, choose the type that recognized the most blocks
                 if (level == 6)
                 {
+                    Int64 maxSize = -1;
+                    foreach (Entry e in L)
+                    {
+                        Int64 vsize = e.Volume.BlockSize;
+                        vsize *= e.Size;
+                        if (vsize > maxSize)
+                        {
+                            maxSize = vsize;
+                            volume = e.Volume;
+                            size = e.Size;
+                            type = e.Type;
+                        }
+                    }
                     if ((size != -1) && (size != volume.BlockCount)) volume = new PaddedVolume(volume, size - volume.BlockCount);
                     return ConstructFS(type, volume);
                 }

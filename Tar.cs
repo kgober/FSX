@@ -62,7 +62,6 @@
 // implement ChangeDir
 // support fileSpec in ListDir
 // support wildcards in FullName fileSpec
-// implement SaveFS
 
 
 using System;
@@ -265,7 +264,16 @@ namespace FSX
 
         public override Boolean SaveFS(String fileName, String format)
         {
-            throw new NotImplementedException();
+            if ((fileName == null) || (fileName.Length == 0)) return false;
+            FileStream f = new FileStream(fileName, FileMode.Create);
+            Byte[] buf = new Byte[mVol.BlockSize];
+            for (Int32 i = 0; i < mVol.BlockCount; i++)
+            {
+                mVol[i].CopyTo(buf, 0);
+                f.Write(buf, 0, buf.Length);
+            }
+            f.Close();
+            return true;
         }
     }
 

@@ -497,15 +497,46 @@ namespace FSX
                             s = String.Format("{0} [Skip={1}]", s, FormatNum(n));
                         }
                     }
-                    else if (opt.StartsWith("pad=", StringComparison.OrdinalIgnoreCase))
+                    else if (opt.StartsWith("size=", StringComparison.OrdinalIgnoreCase))
                     {
-                        Int32 n = ParseNum(opt.Substring("pad=".Length), 0);
+                        Int32 n = ParseNum(opt.Substring("size=".Length), 0);
                         if (n > 0)
                         {
                             Byte[] old = data;
+                            data = new Byte[n];
+                            Int32 l = (n > old.Length) ? old.Length : n;
+                            for (Int32 i = 0; i < l; i++) data[i] = old[i];
+                            s = String.Format("{0} [={1}]", s, FormatNum(n));
+                        }
+                    }
+                    else if (opt.StartsWith("pad=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Int32 n = ParseNum(opt.Substring("pad=".Length), 0);
+                        if (n != 0)
+                        {
+                            Byte[] old = data;
                             data = new Byte[old.Length + n];
-                            for (Int32 i = 0; i < old.Length; i++) data[i] = old[i];
-                            s = String.Format("{0} [{1}{2}]", s, (n >= 0)? "+" : null, FormatNum(n));
+                            Int32 l = (n > 0) ? old.Length : data.Length;
+                            for (Int32 i = 0; i < l; i++) data[i] = old[i];
+                            s = String.Format("{0} [{1}{2}]", s, (n > 0) ? "+" : null, FormatNum(n));
+                        }
+                    }
+                    else if (opt.StartsWith("rev=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Int32 n = ParseNum(opt.Substring("rev=".Length), 0);
+                        if ((n > 0) && ((data.Length % n) == 0))
+                        {
+                            Byte[] old = data;
+                            data = new Byte[old.Length];
+                            Int32 l = 0;
+                            Int32 q = data.Length - n;
+                            while (l < data.Length)
+                            {
+                                for (Int32 i = 0; i < n; i++) data[q + i] = old[l + i];
+                                l += n;
+                                q -= n;
+                            }
+                            s = String.Format("{0} [Rev={1}]", s, FormatNum(n));
                         }
                     }
                     else if (opt.StartsWith("type=", StringComparison.OrdinalIgnoreCase))
@@ -899,6 +930,7 @@ namespace FSX
             Out.WriteLine("load/mount options:");
             Out.WriteLine("  <skip=num> - skip first 'num' bytes of 'pathname'");
             Out.WriteLine("  <pad=num> - pad end of 'pathname' with 'num' zero bytes");
+            Out.WriteLine("  <size=num> - pad or truncate 'pathname' to make its size 'num' bytes");
             Out.WriteLine("  <type=name> - mount as a file system of type 'name'");
         }
 

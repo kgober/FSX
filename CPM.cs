@@ -22,6 +22,8 @@
 
 // CP/M 1.4
 // http://www.seasip.info/Cpm/format14.html
+//
+// current support limited to SSSD 8" floppies (77 tracks, 26 128-byte sectors)
 
 
 using System;
@@ -140,6 +142,7 @@ namespace FSX
         public override void ListFile(String fileSpec, Encoding encoding, TextWriter output)
         {
             Byte[] buf = ReadFile(fileSpec);
+            if (buf == null) return;
             Int32 p = buf.Length;
             for (Int32 i = 0; i < buf.Length; i++)
             {
@@ -154,7 +157,9 @@ namespace FSX
 
         public override void DumpFile(String fileSpec, TextWriter output)
         {
-            Program.Dump(null, ReadFile(fileSpec), output, 16, 128, Program.DumpOptions.ASCII);
+            Byte[] buf = ReadFile(fileSpec);
+            if (buf == null) return;
+            Program.Dump(null, buf, output, 16, 128, Program.DumpOptions.ASCII);
         }
 
         public override String FullName(String fileSpec)

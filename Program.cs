@@ -549,6 +549,11 @@ namespace FSX
                         {
                             return new RawFS(new LBAVolume(s, s, data, 512));
                         }
+                        else if (String.Compare(t, "cpm", StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            CHSVolume d = new CHSVolume(s, s, data, 128, 77, 1, 26);
+                            return new CPM(new InterleavedVolume(d, 6, 0, 0, 52));
+                        }
                         else if (Auto.GetInfo(t, out size, out type))
                         {
                             if ((type == typeof(LBAVolume)) || (type == typeof(Volume)))

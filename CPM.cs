@@ -27,20 +27,36 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace FSX
 {
     partial class CPM : FileSystem
     {
+        private const Int32 BLOCK_SIZE = 1024;
+
         private Volume mVol;
         private String mType;
         private ClusteredVolume mBlocks;
+        private Byte[][] mDir;
 
         public CPM(Volume volume)
         {
             mVol = volume;
             mType = "CP/M";
-            mBlocks = new ClusteredVolume(volume, 8, 52);
+            mBlocks = new ClusteredVolume(volume, BLOCK_SIZE / volume.BlockSize, 52);
+            mDir = new Byte[64][];
+            Int32 p = 0;
+            for (Int32 bn = 0; bn < 2; bn++)
+            {
+                Block B = mBlocks[bn];
+                for (Int32 bp = 0; bp < B.Size; bp += 32)
+                {
+                    Byte[] DE = new Byte[32];
+                    B.CopyTo(DE, 0, bp, 32);
+                    mDir[p++] = DE;
+                }
+            }
         }
 
         public override String Source
@@ -74,57 +90,106 @@ namespace FSX
 
         public override void ListDir(String fileSpec, TextWriter output)
         {
-            for (Int32 bn = 0; bn < 2; bn++)
+            if ((fileSpec == null) || (fileSpec.Length == 0)) fileSpec = "*.*";
+            Regex RE = Regex(fileSpec);
+            for (Int32 dp = 0; dp < mDir.Length; dp++)
             {
-                Block B = mBlocks[bn];
-                for (Int32 bp = 0; bp < B.Size; bp += 32)
+                Byte[] DE = mDir[dp];
+                Byte b = DE[0];
+                if ((b != 0) && (b != 128)) continue;
+                if (DE[12] != 0) continue;
+                if (!RE.IsMatch(Buffer.GetString(DE, 1, 11, DefaultEncoding))) continue;
+                String stat = (b == 0) ? "   " : "[H]";
+                String name = Buffer.GetString(DE, 1, 8, DefaultEncoding);
+                String type = Buffer.GetString(DE, 9, 3, DefaultEncoding);
+                Int32 nr = DE[15];
+                for (Int32 dq = 0; dq < mDir.Length; dq++)
                 {
-                    Byte b = B[bp + 0];
+                    DE = mDir[dq];
+                    b = DE[0];
                     if ((b != 0) && (b != 128)) continue;
-                    String stat = (b == 0) ? String.Empty : "[HID]";
-                    b = B[bp + 12];
-                    if (b != 0) continue;
-                    String name = B.GetString(bp + 1, 8, DefaultEncoding);
-                    String ext = B.GetString(bp + 9, 3, DefaultEncoding);
-                    output.WriteLine("{0} {1} {2}", name, ext, stat);
+                    if (DE[12] == 0) continue;
+                    String nm = Buffer.GetString(DE, 1, 8, DefaultEncoding);
+                    if (nm != name) continue;
+                    String ty = Buffer.GetString(DE, 9, 3, DefaultEncoding);
+                    if (ty != type) continue;
+                    nr += DE[15];
                 }
+                output.WriteLine("{0} {1} {2}  {3:D0}", stat, name, type, nr);
             }
         }
 
         public override void DumpDir(String fileSpec, TextWriter output)
         {
-            for (Int32 bn = 0; bn < 2; bn++)
+            if ((fileSpec == null) || (fileSpec.Length == 0)) fileSpec = "*.*";
+            Regex RE = Regex(fileSpec);
+            for (Int32 dp = 0; dp < mDir.Length; dp++)
             {
-                Block B = mBlocks[bn];
-                for (Int32 bp = 0; bp < B.Size; bp += 32)
-                {
-                    Byte b = B[bp + 0];
-                    String stat = (b == 0) ? "[   ]" : (b == 0x80) ? "[HID]" : (b == 0xe5) ? "[DEL]" : String.Format("[{0:x2}h]", b);
-                    String name = B.GetString(bp + 1, 8, DefaultEncoding);
-                    String type = B.GetString(bp + 9, 3, DefaultEncoding);
-                    Byte ext = B[bp + 12];
-                    Byte ns = B[bp + 15];
-                    output.WriteLine("{0} {1} {2} ({3:D2}) {4:D0}", stat, name, type, ext, ns);
-                }
+                Byte[] DE = mDir[dp];
+                if (!RE.IsMatch(Buffer.GetString(DE, 1, 11, DefaultEncoding))) continue;
+                Byte b = DE[0];
+                String stat = (b == 0) ? "[   ]" : (b == 0x80) ? "[HID]" : (b == 0xe5) ? "[DEL]" : String.Format("[{0:x2}h]", b);
+                String name = Buffer.GetString(DE, 1, 8, DefaultEncoding);
+                String type = Buffer.GetString(DE, 9, 3, DefaultEncoding);
+                Byte ext = DE[12];
+                Byte nr = DE[15];
+                output.WriteLine("{0} {1} {2} ({3})  {4:D0}", stat, name, type, (ext <= 31) ? ext.ToString("D2") : "  ", nr);
             }
         }
 
         public override void ListFile(String fileSpec, Encoding encoding, TextWriter output)
         {
+            Byte[] buf = ReadFile(fileSpec);
+            Int32 p = buf.Length;
+            for (Int32 i = 0; i < buf.Length; i++)
+            {
+                if (buf[i] == 26) // ^Z
+                {
+                    p = i;
+                    break;
+                }
+            }
+            output.Write(encoding.GetString(buf, 0, p));
         }
 
         public override void DumpFile(String fileSpec, TextWriter output)
         {
+            Program.Dump(null, ReadFile(fileSpec), output, 16, 128, Program.DumpOptions.ASCII);
         }
 
         public override String FullName(String fileSpec)
         {
-            throw new NotImplementedException();
+            Byte[] DE = FindFile(fileSpec);
+            if (DE == null) return null;
+            String name = Buffer.GetString(DE, 1, 8, DefaultEncoding).TrimEnd(' ');
+            String type = Buffer.GetString(DE, 9, 3, DefaultEncoding).TrimEnd(' ');
+            if (type.Length == 0) return name;
+            return String.Concat(name, ".", type);
         }
 
         public override Byte[] ReadFile(String fileSpec)
         {
-            throw new NotImplementedException();
+            Byte[] DE = FindFile(fileSpec);
+            if (DE == null) return null;
+            String fileName = Buffer.GetString(DE, 1, 11, DefaultEncoding);
+            Int32 len = 0;
+            for (Int32 ext = 0; ext < 32; ext++)
+            {
+                DE = FindFile(fileName, ext);
+                if (DE != null) len += DE[15];
+            }
+            Byte[] buf = new Byte[len *= 128];
+            Int32 bp = 0;
+            for (Int32 ext = 0; ext < 32; ext++)
+            {
+                DE = FindFile(fileName, ext);
+                for (Int32 i = 16; i < 32; i++)
+                {
+                    if ((DE != null) && (DE[i] != 0)) mBlocks[DE[i]].CopyTo(buf, bp);
+                    bp += BLOCK_SIZE;
+                }
+            }
+            return buf;
         }
 
         public override Boolean SaveFS(String fileName, String format)
@@ -139,6 +204,64 @@ namespace FSX
             }
             f.Close();
             return true;
+        }
+
+        private Byte[] FindFile(String fileSpec)
+        {
+            Regex RE = Regex(fileSpec);
+            for (Int32 dp = 0; dp < mDir.Length; dp++)
+            {
+                Byte[] DE = mDir[dp];
+                Byte b = DE[0];
+                if ((b != 0) && (b != 128)) continue;
+                if (DE[12] != 0) continue;
+                String fileName = Buffer.GetString(DE, 1, 11, DefaultEncoding);
+                if (!RE.IsMatch(fileName)) continue;
+                return DE;
+            }
+            return null;
+        }
+
+        private Byte[] FindFile(String fileName, Int32 extentNum)
+        {
+            for (Int32 dp = 0; dp < mDir.Length; dp++)
+            {
+                Byte[] DE = mDir[dp];
+                Byte b = DE[0];
+                if ((b != 0) && (b != 128)) continue;
+                if (DE[12] != extentNum) continue;
+                if (fileName != Buffer.GetString(DE, 1, 11, DefaultEncoding)) continue;
+                return DE;
+            }
+            return null;
+        }
+    }
+
+    partial class CPM
+    {
+        // convert a CP/M wildcard pattern to a Regex
+        private static Regex Regex(String pattern)
+        {
+            String p = pattern.ToUpperInvariant();
+            String name = p;
+            String type = "   ";
+            Int32 i;
+            if ((i = p.IndexOf('.')) != -1)
+            {
+                name = p.Substring(0, i);
+                type = p.Substring(i + 1);
+            }
+            if ((i = name.IndexOf('*')) != -1)
+            {
+                name = String.Concat(name.Substring(0, i), new String('?', 8 - i));
+            }
+            if ((i = type.IndexOf('*')) != -1)
+            {
+                type = String.Concat(type.Substring(0, i), new String('?', 3 - i));
+            }
+            p = String.Concat("^", name.Replace("?", ".").PadRight(8), type.Replace("?", ".").PadRight(3), "$");
+            Debug.WriteLine(Debug.Level.Diag, "CPM.Regex: <{0}> => <{1}>", pattern, p);
+            return new Regex(p);
         }
     }
 

@@ -910,8 +910,8 @@ namespace FSX
         static void ShowHelp()
         {
             Out.WriteLine("Commands:");
-            Out.WriteLine("  load|mount id pathname[ <opts>] - mount file 'pathname' as volume 'id:'");
-            Out.WriteLine("  save|write id pathname - export image of volume 'id:' to file 'pathname'");
+            Out.WriteLine("  load|mount id: pathname[ <opts>] - mount file 'pathname' as volume 'id:'");
+            Out.WriteLine("  save|write id: pathname - export image of volume 'id:' to file 'pathname'");
             Out.WriteLine("  unload|unmount|umount id - unmount volume 'id:'");
             Out.WriteLine("  vols|volumes - show mounted volumes");
             Out.WriteLine("  info [id:] - show volume information");

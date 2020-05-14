@@ -18,9 +18,10 @@ The following storage formats are supported:
 
 Support for additional volumes and file formats is planned, but in no particular order.  Feedback about areas to focus on next is welcomed.
 
+### Usage Summary
 To use FSX, simply run it from a console window such as the Windows Command Prompt.  At the FSX> prompt, any of the following commands are accepted:
-* load|mount id pathname[ \<opts\>] - mount file 'pathname' as volume 'id:'
-* save|write id pathname - export image of volume 'id:' to file 'pathname'
+* load|mount id: pathname[ \<opts\>] - mount file 'pathname' as volume 'id:'
+* save|write id: pathname - export image of volume 'id:' to file 'pathname'
 * unload|unmount|umount id - unmount volume 'id:'
 * vols|volumes - show mounted volumes
 * info [id:] - show volume information
@@ -44,4 +45,5 @@ To use FSX, simply run it from a console window such as the Windows Command Prom
 load/mount options:
 * \<skip=num\> - skip first 'num' bytes of 'pathname'
 * \<pad=num\> - pad end of 'pathname' with 'num' zero bytes
+* \<size=num\> - pad or truncate 'pathname' to make its size 'num' bytes
 * \<type=name\> - mount as a file system of type 'name'

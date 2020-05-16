@@ -74,6 +74,7 @@ namespace FSX
         static public Int32 Verbose = 1;
 
         static private Dictionary<String, VDE> VolMap = new Dictionary<String, VDE>(StringComparer.OrdinalIgnoreCase);
+        static private Stack<String> RcFiles = new Stack<String>();
 
         static void Main(String[] args)
         {
@@ -172,9 +173,10 @@ namespace FSX
         {
             while (true)
             {
-                String cmd, arg;
+                String cmd;
+                List<String> args, opts;
                 Console.Error.Write("\nFSX>");
-                if (!ReadCommand(input, out cmd, out arg))
+                if (!ReadCommand(input, out cmd, out args, out opts))
                 {
                     Console.Error.WriteLine();
                     return;
@@ -185,13 +187,19 @@ namespace FSX
                 }
                 else if ((cmd == "source") || (cmd == "."))
                 {
-                    StreamReader file = new StreamReader(arg);
-                    CommandLoop(file); // TODO: prevent endless recursion due to sourcing a file already being sourced
+                    foreach (String arg in args)
+                    {
+                        if (RcFiles.Contains(arg)) break;
+                        RcFiles.Push(arg);
+                        StreamReader file = new StreamReader(arg);
+                        CommandLoop(file);
+                        RcFiles.Pop();
+                    }
                 }
                 else if (cmd == "out")
                 {
                     if ((Out != Console.Out) && (Out != null)) Out.Close();
-                    Out = ((arg == null) || (arg.Length == 0)) ? Console.Out : new StreamWriter(arg, true, Encoding.UTF8);
+                    Out = (args.Count == 1) ? new StreamWriter(args[0], true, Encoding.UTF8) : Console.Out;
                 }
                 else if (cmd == "help")
                 {
@@ -200,12 +208,12 @@ namespace FSX
                 else if ((cmd == "verb") || (cmd == "verbose"))
                 {
                     Int32 n;
-                    if (Int32.TryParse(arg, out n)) Verbose = n;
+                    if ((args.Count == 1) && (Int32.TryParse(args[0], out n))) Verbose = n;
                 }
                 else if ((cmd == "deb") || (cmd == "debug"))
                 {
                     Int32 n;
-                    if (Int32.TryParse(arg, out n)) Debug.DebugLevel = n;
+                    if ((args.Count == 1) && (Int32.TryParse(args[0], out n))) Debug.DebugLevel = n;
                 }
                 else if ((cmd == "vols") || (cmd == "volumes"))
                 {
@@ -217,8 +225,12 @@ namespace FSX
                 }
                 else if (cmd == "info")
                 {
-                    VDE v = ParseVol(ref arg);
-                    Out.WriteLine(v.FS.Info);
+                    foreach (String arg in args)
+                    {
+                        String s = arg;
+                        VDE v = ParseVol(ref s);
+                        Out.WriteLine(v.FS.Info);
+                    }
                 }
                 else if (cmd == "test")
                 {
@@ -226,13 +238,13 @@ namespace FSX
                 }
                 else if ((cmd == "load") || (cmd == "mount"))
                 {
-                    Int32 p = arg.IndexOf(' ');
-                    String s = (p == -1) ? arg : arg.Substring(0, p);       // volume name
-                    arg = (p == -1) ? String.Empty : arg.Substring(p + 1);  // volume source
+                    if (args.Count != 2) continue;
+                    String s = args[0]; // volume name
                     if (s.EndsWith(@"\")) s = s.Substring(0, s.Length - 1);
                     if (s.EndsWith(@":")) s = s.Substring(0, s.Length - 1);
                     if (s.Length == 1) s = s.ToUpperInvariant();
-                    FileSystem fs = LoadFS(arg);
+                    String arg = args[1]; // volume source
+                    FileSystem fs = LoadFS(arg, opts);
                     if (fs != null)
                     {
                         VDE v = new VDE(s, fs);
@@ -243,9 +255,9 @@ namespace FSX
                 }
                 else if ((cmd == "save") || (cmd == "write"))
                 {
-                    Int32 p = arg.IndexOf(' ');
-                    String s = (p == -1) ? arg : arg.Substring(0, p);       // source volume/file
-                    arg = (p == -1) ? String.Empty : arg.Substring(p + 1);  // target file
+                    if (args.Count == 0) continue; 
+                    String s = args[0]; // source volume/file
+                    String arg = (args.Count > 1) ? args[1] : String.Empty; // target file
                     VDE src = ParseVol(ref s);
                     if (s.Length == 0)
                     {
@@ -267,18 +279,21 @@ namespace FSX
                 }
                 else if ((cmd == "unload") || (cmd == "unmount") || (cmd == "umount"))
                 {
-                    Int32 p = arg.IndexOf(':');
-                    String k = (p == -1) ? arg : arg.Substring(0, p);
-                    if (VolMap.ContainsKey(k))
+                    foreach (String arg in args)
                     {
-                        VDE v = VolMap[k];
-                        if (v.Key != Vol.Key)
+                        Int32 p = arg.IndexOf(':');
+                        String k = (p == -1) ? arg : arg.Substring(0, p);
+                        if (VolMap.ContainsKey(k))
                         {
-                            VolMap.Remove(k);
-                        }
-                        else
-                        {
-                            Console.Error.WriteLine("Cannot unmount current volume.  Change to another volume first.");
+                            VDE v = VolMap[k];
+                            if (v.Key != Vol.Key)
+                            {
+                                VolMap.Remove(k);
+                            }
+                            else
+                            {
+                                Console.Error.WriteLine("Cannot unmount current volume.  Change to another volume first.");
+                            }
                         }
                     }
                 }
@@ -295,59 +310,85 @@ namespace FSX
                 }
                 else if (cmd == "cd")
                 {
-                    VDE v = ParseVol(ref arg);
-                    v.FS.ChangeDir(arg);
+                    foreach (String arg in args)
+                    {
+                        String s = arg;
+                        VDE v = ParseVol(ref s);
+                        v.FS.ChangeDir(s);
+                    }
                 }
                 else if ((cmd == "dir") || (cmd == "ls"))
                 {
-                    VDE v = ParseVol(ref arg);
-                    v.FS.ListDir(arg, Out);
+                    if (args.Count == 0) args.Add(String.Empty);
+                    foreach (String arg in args)
+                    {
+                        String s = arg;
+                        VDE v = ParseVol(ref s);
+                        v.FS.ListDir(s, Out);
+                    }
                 }
                 else if (cmd == "dumpdir")
                 {
-                    VDE v = ParseVol(ref arg);
-                    v.FS.DumpDir(arg, Out);
+                    if (args.Count == 0) args.Add(String.Empty);
+                    foreach (String arg in args)
+                    {
+                        String s = arg;
+                        VDE v = ParseVol(ref s);
+                        v.FS.DumpDir(s, Out);
+                    }
                 }
                 else if ((cmd == "type") || (cmd == "cat"))
                 {
-                    VDE v = ParseVol(ref arg);
-                    v.FS.ListFile(arg, v.FS.DefaultEncoding, Out);
+                    foreach (String arg in args)
+                    {
+                        String s = arg;
+                        VDE v = ParseVol(ref s);
+                        v.FS.ListFile(s, v.FS.DefaultEncoding, Out);
+                    }
                 }
                 else if (cmd == "zcat")
                 {
-                    VDE v = ParseVol(ref arg);
-                    Byte[] data = v.FS.ReadFile(arg);
-                    if (data != null)
+                    foreach (String arg in args)
                     {
-                        if (GZip.HasHeader(data))
+                        String s = arg;
+                        VDE v = ParseVol(ref s);
+                        Byte[] data = v.FS.ReadFile(s);
+                        if (data != null)
                         {
-                            GZip.Decompressor D = new GZip.Decompressor(data);
-                            if (D.GetByteCount() != -1) data = D.GetBytes();
-                        }
-                        else if (Compress.HasHeader(data))
-                        {
-                            Compress.Decompressor D = new Compress.Decompressor(data);
-                            if (D.GetByteCount() != -1) data = D.GetBytes();
-                        }
-                        else if (Pack.HasHeader(data))
-                        {
-                            Pack.Decompressor D = new Pack.Decompressor(data);
-                            if (D.GetByteCount() != -1) data = D.GetBytes();
-                        }
-                        String buf = v.FS.DefaultEncoding.GetString(data);
-                        Int32 p = 0;
-                        for (Int32 i = 0; i < buf.Length; i++)
-                        {
-                            if (buf[i] != '\n') continue;
-                            Out.WriteLine(buf.Substring(p, i - p));
-                            p = i + 1;
+                            if (GZip.HasHeader(data))
+                            {
+                                GZip.Decompressor D = new GZip.Decompressor(data);
+                                if (D.GetByteCount() != -1) data = D.GetBytes();
+                            }
+                            else if (Compress.HasHeader(data))
+                            {
+                                Compress.Decompressor D = new Compress.Decompressor(data);
+                                if (D.GetByteCount() != -1) data = D.GetBytes();
+                            }
+                            else if (Pack.HasHeader(data))
+                            {
+                                Pack.Decompressor D = new Pack.Decompressor(data);
+                                if (D.GetByteCount() != -1) data = D.GetBytes();
+                            }
+                            String buf = v.FS.DefaultEncoding.GetString(data);
+                            Int32 p = 0;
+                            for (Int32 i = 0; i < buf.Length; i++)
+                            {
+                                if (buf[i] != '\n') continue;
+                                Out.WriteLine(buf.Substring(p, i - p));
+                                p = i + 1;
+                            }
                         }
                     }
                 }
                 else if ((cmd == "dump") || (cmd == "od"))
                 {
-                    VDE v = ParseVol(ref arg);
-                    v.FS.DumpFile(arg, Out);
+                    foreach (String arg in args)
+                    {
+                        String s = arg;
+                        VDE v = ParseVol(ref s);
+                        v.FS.DumpFile(s, Out);
+                    }
                 }
                 else if (cmd.EndsWith(":"))
                 {
@@ -361,28 +402,115 @@ namespace FSX
             }
         }
 
-        static Boolean ReadCommand(TextReader input, out String command, out String arg)
+        static Boolean ReadCommand(TextReader input, out String command, out List<String> args, out List<String> opts)
         {
+            command = null;
+            args = null;
+            opts = null;
+
             // read one line
             String line = input.ReadLine();
-            if (line == null)
-            {
-                command = null;
-                arg = null;
-                return false;
-            }
+            if (line == null) return false;
             if (input != Console.In) Console.Error.WriteLine(line); // echo if reading from file
 
             // remove leading white space
             Int32 p = 0;
             while ((p < line.Length) && ((line[p] == ' ') || (line[p] == '\t'))) p++;
             line = line.Substring(p);
+            if (line.Length == 0) return false;
 
-            // separate command and arg
-            // TODO: return arg array and allow arg quoting
+            // separate command and args
             p = line.IndexOf(' ');
             command = (p == -1) ? line : line.Substring(0, p);
-            arg = (p == -1) ? String.Empty : line.Substring(p + 1);
+            line = (p == -1) ? String.Empty : line.Substring(p + 1);
+
+            // separate and dequote args
+            args = new List<String>();
+            opts = new List<String>();
+            Int32 state = 0;
+            StringBuilder buf = new StringBuilder(line.Length);
+            for (Int32 i = 0; i < line.Length; i++)
+            {
+                Char c = line[i];
+                switch (state)
+                {
+                    case 0: // white space
+                        if (c == '\"') state = 2; // quoted arg
+                        else if (c == '<') state = 4; // option
+                        else if ((c != ' ') && (c != '\t'))
+                        {
+                            buf.Append(c);
+                            state = 1; // unquoted arg
+                        }
+                        break;
+                    case 1: // unquoted characters
+                        if (c == '\"') state = 2; // quoted substring
+                        else if ((c == ' ') || (c == '\t'))
+                        {
+                            args.Add(buf.ToString());
+                            buf.Length = 0;
+                            state = 0; // end of arg
+                        }
+                        else buf.Append(c);
+                        break;
+                    case 2: // quoted characters
+                        if (c == '\"') state = 3; // one quote
+                        else buf.Append(c);
+                        break;
+                    case 3: // embedded quote
+                        if (c == '\"')
+                        {
+                            buf.Append(c);
+                            state = 2; // two quotes (quoted quote)
+                        }
+                        else if ((c == ' ') || (c == '\t'))
+                        {
+                            args.Add(buf.ToString());
+                            buf.Length = 0;
+                            state = 0; // end of arg
+                        }
+                        else
+                        {
+                            buf.Append(c);
+                            state = 1; // quoted substring ended
+                        }
+                        break;
+                    case 4: // option
+                        if (c == '>')
+                        {
+                            opts.Add(buf.ToString());
+                            buf.Length = 0;
+                            state = 0; // end of option
+                        }
+                        else if (c == '\"') state = 5; // quoted substring
+                        else buf.Append(c);
+                        break;
+                    case 5: // quoted option chars
+                        if (c == '\"') state = 6; // one quote
+                        else buf.Append(c);
+                        break;
+                    case 6: // embedded quote
+                        if (c == '\"')
+                        {
+                            buf.Append(c);
+                            state = 5; // two quotes (quoted quote)
+                        }
+                        else if (c == '>')
+                        {
+                            opts.Add(buf.ToString());
+                            buf.Length = 0;
+                            state = 0; // end of option
+                        }
+                        else
+                        {
+                            buf.Append(c);
+                            state = 4; // quoted substring ended
+                        }
+                        break;
+                }
+            }
+            if (state >= 4) opts.Add(buf.ToString());
+            else if (state > 0) args.Add(buf.ToString());
             return true;
         }
 
@@ -396,11 +524,12 @@ namespace FSX
             return VolMap[k];
         }
         
-        static FileSystem LoadFS(String source)
+        // load a FileSystem from a named location (a file, usually)
+        static FileSystem LoadFS(String source, List<String> opts)
         {
             if (source == null) return null;
 
-            // always attempt HostFS then HostPath for "X:" (where X is a single character)
+            // always attempt HostFS then HostPath first for "X:" (where X is a single character)
             if ((source.Length == 2) && (source[1] == ':'))
             {
                 String name = String.Concat(source.ToUpperInvariant(), @"\");
@@ -447,16 +576,8 @@ namespace FSX
                 }
             }
 
-            // otherwise source must be a file
+            // otherwise source must be in file 'path' on volume 'vol'
             String s = source;
-            String opts = String.Empty;
-            p = path.IndexOf('<');
-            if (p != -1)
-            {
-                opts = path.Substring(p);
-                path = path.Substring(0, p).TrimEnd(' ');
-                s = s.Substring(0, s.Length - opts.Length).TrimEnd(' ');
-            }
             if (((vol.FS == null) && (!File.Exists(s))) || ((vol.FS != null) && (vol.FS.FullName(path) == null) && (!File.Exists(s))))
             {
                 Console.Error.WriteLine("File Not Found: {0}", s);
@@ -472,99 +593,93 @@ namespace FSX
             }
 
             // process options
-            while (opts.Length != 0)
+            foreach (String val in opts)
             {
-                p = opts.IndexOf('>');
-                if (p != -1)
+                String opt = val;
+                if (opt.StartsWith("skip=", StringComparison.OrdinalIgnoreCase))
                 {
-                    String opt = opts.Substring(1, p - 1);
-                    opts = opts.Substring(p + 1);
-                    if ((opts.Length != 0) && ((p = opts.IndexOf('<')) != -1)) opts = opts.Substring(p);
-                    if (opt.StartsWith("skip=", StringComparison.OrdinalIgnoreCase))
+                    opt = opt.Substring("skip=".Length);
+                    Int32 n = ParseNum(opt, 0);
+                    if (n >= data.Length)
                     {
-                        opt = opt.Substring("skip=".Length);
-                        Int32 n = ParseNum(opt, 0);
-                        if (n >= data.Length)
-                        {
-                            data = new Byte[0];
-                            s = String.Format("{0} [Skip={1}]", s, FormatNum(n));
-                        }
-                        else if (n > 0)
-                        {
-                            Byte[] old = data;
-                            data = new Byte[old.Length - n];
-                            for (Int32 i = 0; i < data.Length; i++) data[i] = old[n + i];
-                            s = String.Format("{0} [Skip={1}]", s, FormatNum(n));
-                        }
+                        data = new Byte[0];
+                        s = String.Format("{0} [Skip={1}]", s, FormatNum(n));
                     }
-                    else if (opt.StartsWith("size=", StringComparison.OrdinalIgnoreCase))
+                    else if (n > 0)
                     {
-                        Int32 n = ParseNum(opt.Substring("size=".Length), 0);
-                        if (n > 0)
-                        {
-                            Byte[] old = data;
-                            data = new Byte[n];
-                            Int32 l = (n > old.Length) ? old.Length : n;
-                            for (Int32 i = 0; i < l; i++) data[i] = old[i];
-                            s = String.Format("{0} [={1}]", s, FormatNum(n));
-                        }
+                        Byte[] old = data;
+                        data = new Byte[old.Length - n];
+                        for (Int32 i = 0; i < data.Length; i++) data[i] = old[n + i];
+                        s = String.Format("{0} [Skip={1}]", s, FormatNum(n));
                     }
-                    else if (opt.StartsWith("pad=", StringComparison.OrdinalIgnoreCase))
+                }
+                else if (opt.StartsWith("size=", StringComparison.OrdinalIgnoreCase))
+                {
+                    Int32 n = ParseNum(opt.Substring("size=".Length), 0);
+                    if (n > 0)
                     {
-                        Int32 n = ParseNum(opt.Substring("pad=".Length), 0);
-                        if (n != 0)
-                        {
-                            Byte[] old = data;
-                            data = new Byte[old.Length + n];
-                            Int32 l = (n > 0) ? old.Length : data.Length;
-                            for (Int32 i = 0; i < l; i++) data[i] = old[i];
-                            s = String.Format("{0} [{1}{2}]", s, (n > 0) ? "+" : null, FormatNum(n));
-                        }
+                        Byte[] old = data;
+                        data = new Byte[n];
+                        Int32 l = (n > old.Length) ? old.Length : n;
+                        for (Int32 i = 0; i < l; i++) data[i] = old[i];
+                        s = String.Format("{0} [={1}]", s, FormatNum(n));
                     }
-                    else if (opt.StartsWith("rev=", StringComparison.OrdinalIgnoreCase))
+                }
+                else if (opt.StartsWith("pad=", StringComparison.OrdinalIgnoreCase))
+                {
+                    Int32 n = ParseNum(opt.Substring("pad=".Length), 0);
+                    if (n != 0)
                     {
-                        Int32 n = ParseNum(opt.Substring("rev=".Length), 0);
-                        if ((n > 0) && ((data.Length % n) == 0))
-                        {
-                            Byte[] old = data;
-                            data = new Byte[old.Length];
-                            Int32 l = 0;
-                            Int32 q = data.Length - n;
-                            while (l < data.Length)
-                            {
-                                for (Int32 i = 0; i < n; i++) data[q + i] = old[l + i];
-                                l += n;
-                                q -= n;
-                            }
-                            s = String.Format("{0} [Rev={1}]", s, FormatNum(n));
-                        }
+                        Byte[] old = data;
+                        data = new Byte[old.Length + n];
+                        Int32 l = (n > 0) ? old.Length : data.Length;
+                        for (Int32 i = 0; i < l; i++) data[i] = old[i];
+                        s = String.Format("{0} [{1}{2}]", s, (n > 0) ? "+" : null, FormatNum(n));
                     }
-                    else if (opt.StartsWith("type=", StringComparison.OrdinalIgnoreCase))
+                }
+                else if (opt.StartsWith("rev=", StringComparison.OrdinalIgnoreCase))
+                {
+                    Int32 n = ParseNum(opt.Substring("rev=".Length), 0);
+                    if ((n > 0) && ((data.Length % n) == 0))
                     {
-                        // this should probably be split into, e.g. <disk=CHS(77,1,26)> <fs=RT11>
-                        String t = opt.Substring("type=".Length).Trim();
-                        Int32 size;
-                        Type type;
-                        if (String.Compare(t, "raw", StringComparison.OrdinalIgnoreCase) == 0)
+                        Byte[] old = data;
+                        data = new Byte[old.Length];
+                        Int32 l = 0;
+                        Int32 q = data.Length - n;
+                        while (l < data.Length)
                         {
-                            return new RawFS(new LBAVolume(s, s, data, 512));
+                            for (Int32 i = 0; i < n; i++) data[q + i] = old[l + i];
+                            l += n;
+                            q -= n;
                         }
-                        else if (String.Compare(t, "cpm", StringComparison.OrdinalIgnoreCase) == 0)
+                        s = String.Format("{0} [Rev={1}]", s, FormatNum(n));
+                    }
+                }
+                else if (opt.StartsWith("type=", StringComparison.OrdinalIgnoreCase))
+                {
+                    // this should probably be split into, e.g. <disk=CHS(77,1,26)> <fs=RT11>
+                    String t = opt.Substring("type=".Length).Trim();
+                    Int32 size;
+                    Type type;
+                    if (String.Compare(t, "raw", StringComparison.OrdinalIgnoreCase) == 0)
+                    {
+                        return new RawFS(new LBAVolume(s, s, data, 512));
+                    }
+                    else if (String.Compare(t, "cpm", StringComparison.OrdinalIgnoreCase) == 0)
+                    {
+                        CHSVolume d = new CHSVolume(s, s, data, 128, 77, 1, 26);
+                        return new CPM(new InterleavedVolume(d, 6, 0, 0, 52));
+                    }
+                    else if (Auto.GetInfo(t, out size, out type))
+                    {
+                        if ((type == typeof(LBAVolume)) || (type == typeof(Volume)))
                         {
-                            CHSVolume d = new CHSVolume(s, s, data, 128, 77, 1, 26);
-                            return new CPM(new InterleavedVolume(d, 6, 0, 0, 52));
+                            Volume volume = new LBAVolume(s, s, data, size);
+                            return Auto.ConstructFS(t, volume);
                         }
-                        else if (Auto.GetInfo(t, out size, out type))
+                        else if (type == typeof(CHSVolume))
                         {
-                            if ((type == typeof(LBAVolume)) || (type == typeof(Volume)))
-                            {
-                                Volume volume = new LBAVolume(s, s, data, size);
-                                return Auto.ConstructFS(t, volume);
-                            }
-                            else if (type == typeof(CHSVolume))
-                            {
-                                // no good way to guess what C/H/S values to use
-                            }
+                            // no good way to guess what C/H/S values to use
                         }
                     }
                 }
@@ -919,8 +1034,8 @@ namespace FSX
             Out.WriteLine("  pwd - show current working directory on current volume");
             Out.WriteLine("  id: - change current volume to 'id:'");
             Out.WriteLine("  cd [id:]dir - change current directory");
-            Out.WriteLine("  dir|ls [id:]pattern - show directory");
-            Out.WriteLine("  dumpdir [id:]pattern - show raw directory data");
+            Out.WriteLine("  dir|ls [[id:]pattern] - show directory");
+            Out.WriteLine("  dumpdir [[id:]pattern] - show raw directory data");
             Out.WriteLine("  type|cat [id:]file - show file as text");
             Out.WriteLine("  zcat [id:]file - show compressed file as text");
             Out.WriteLine("  dump|od [id:]file - show file as a hex dump");

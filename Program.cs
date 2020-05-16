@@ -592,14 +592,36 @@ namespace FSX
                 return null;
             }
 
-            // process options
-            foreach (String val in opts)
+            // check if source needs to be decompressed
+            if (GZip.HasHeader(data))
             {
-                String opt = val;
+                // gzip compressed data
+                GZip.Decompressor D = new GZip.Decompressor(data);
+                if (D.GetByteCount() != -1)
+                {
+                    data = D.GetBytes();
+                    if (path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)) path = path.Substring(0, path.Length - 3);
+                    else if (path.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase)) path = String.Concat(path.Substring(0, path.Length - 3), "tar");
+                }
+            }
+            if (Compress.HasHeader(data))
+            {
+                // .Z compressed data
+                Compress.Decompressor D = new Compress.Decompressor(data);
+                if (D.GetByteCount() != -1)
+                {
+                    data = D.GetBytes();
+                    if (path.EndsWith(".Z", StringComparison.OrdinalIgnoreCase)) path = path.Substring(0, path.Length - 2);
+                    else if (path.EndsWith(".taz", StringComparison.OrdinalIgnoreCase)) path = String.Concat(path.Substring(0, path.Length - 3), "tar");
+                }
+            }
+
+            // process options
+            foreach (String opt in opts)
+            {
                 if (opt.StartsWith("skip=", StringComparison.OrdinalIgnoreCase))
                 {
-                    opt = opt.Substring("skip=".Length);
-                    Int32 n = ParseNum(opt, 0);
+                    Int32 n = ParseNum(opt.Substring("skip=".Length), 0);
                     if (n >= data.Length)
                     {
                         data = new Byte[0];
@@ -686,46 +708,6 @@ namespace FSX
             }
 
             // try to identify storage format based on file extension
-            if ((path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)) && (GZip.HasHeader(data)))
-            {
-                // gzip compressed data
-                GZip.Decompressor D = new GZip.Decompressor(data);
-                if (D.GetByteCount() != -1)
-                {
-                    data = D.GetBytes();
-                    path = path.Substring(0, path.Length - 3);
-                }
-            }
-            if ((path.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase)) && (GZip.HasHeader(data)))
-            {
-                // gzip compressed tar file
-                GZip.Decompressor D = new GZip.Decompressor(data);
-                if (D.GetByteCount() != -1)
-                {
-                    data = D.GetBytes();
-                    path = String.Concat(path.Substring(0, path.Length - 3), "tar");
-                }
-            }
-            if ((path.EndsWith(".Z", StringComparison.OrdinalIgnoreCase)) && (Compress.HasHeader(data)))
-            {
-                // .Z compressed data
-                Compress.Decompressor D = new Compress.Decompressor(data);
-                if (D.GetByteCount() != -1)
-                {
-                    data = D.GetBytes();
-                    path = path.Substring(0, path.Length - 2);
-                }
-            }
-            if ((path.EndsWith(".taz", StringComparison.OrdinalIgnoreCase)) && (Compress.HasHeader(data)))
-            {
-                // .Z compressed tar file
-                Compress.Decompressor D = new Compress.Decompressor(data);
-                if (D.GetByteCount() != -1)
-                {
-                    data = D.GetBytes();
-                    path = String.Concat(path.Substring(0, path.Length - 3), "tar");
-                }
-            }
             if ((path.EndsWith(".imd", StringComparison.OrdinalIgnoreCase)) && (ImageDisk.HasHeader(data)))
             {
                 // ImageDisk .IMD image file

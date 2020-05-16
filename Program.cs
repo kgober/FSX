@@ -30,13 +30,11 @@
 // Future Improvements / To Do
 // apply consistent style for "public static" and "private static"
 // improve exception handling
-// improve argument parsing
 // consider integrating 'zcat' into 'cat'
 // support new pack (.z) in 'zcat'
 // support compact (.C) in 'zcat'
 // improve 'force' mount of damaged or unrecognizable volumes
 // allow demand-loading from non-compressed image files rather than pre-loading entire file
-// add support for CP/M images
 // add support for ISO-9660 file systems
 // add support for 7-Zip files (.7z)
 // add support for ZIP files

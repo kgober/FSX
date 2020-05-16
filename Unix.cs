@@ -52,10 +52,10 @@
 
 
 // Improvements / To Do
+// decouple block size, inode and directory format to reuse more v5/v7/2BSD code
 // in Test, check for duplicate names in a directory
 // relax link count check for inodes (file systems are readable despite this)
 // relax block allocation checks (file systems are readable despite this)
-// support 2.8BSD+ (v7 with 1k blocks)
 // support BSD Fast File System (FFS)
 // allow files to be written/deleted in images
 

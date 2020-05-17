@@ -49,30 +49,30 @@ namespace FSX
 {
     class Program
     {
-        public struct VDE // Volume Dictionary Entry
+        public struct VolInfo // Volume Dictionary Entry
         {
-            public String Key;
+            public String ID;
             public FileSystem FS;
 
-            public VDE(String key)
+            public VolInfo(String id)
             {
-                Key = key;
+                ID = id;
                 FS = null;
             }
 
-            public VDE(String key, FileSystem fileSystem)
+            public VolInfo(String id, FileSystem fileSystem)
             {
-                Key = key;
+                ID = id;
                 FS = fileSystem;
             }
         }
 
         static public TextWriter Out = Console.Out;
-        static public VDE Vol;
+        static public VolInfo CurVol;
         static public Int32 Verbose = 1;
 
-        static private Dictionary<String, VDE> VolMap = new Dictionary<String, VDE>(StringComparer.OrdinalIgnoreCase);
-        static private Stack<String> RcFiles = new Stack<String>();
+        static private Dictionary<String, VolInfo> VolMap = new Dictionary<String, VolInfo>(StringComparer.OrdinalIgnoreCase);
+        static private Stack<String> CmdSources = new Stack<String>();
 
         static void Main(String[] args)
         {
@@ -154,16 +154,16 @@ namespace FSX
 
         static void MountHostVolumes()
         {
-            foreach (DriveInfo d in DriveInfo.GetDrives())
+            foreach (DriveInfo drive in DriveInfo.GetDrives())
             {
-                if (!d.IsReady) continue;
-                String s = d.Name;
-                if (s.EndsWith(@"\")) s = s.Substring(0, s.Length - 1);
-                if (s.EndsWith(@":")) s = s.Substring(0, s.Length - 1);
-                VDE v = new VDE(s, new HostFS(d.Name, d.DriveFormat));
-                VolMap.Add(v.Key, v);
-                if (Vol.Key == null) Vol = v;
-                Console.Error.WriteLine("{0}: = {1} [{2}]", s, d.Name, v.FS.Type);
+                if (!drive.IsReady) continue;
+                String id = drive.Name;
+                if (id.EndsWith(@"\")) id = id.Substring(0, id.Length - 1);
+                if (id.EndsWith(@":")) id = id.Substring(0, id.Length - 1);
+                VolInfo vol = new VolInfo(id, new HostFS(drive.Name, drive.DriveFormat));
+                VolMap.Add(vol.ID, vol);
+                if (CurVol.ID == null) CurVol = vol;
+                Console.Error.WriteLine("{0}: = {1} [{2}]", id, drive.Name, vol.FS.Type);
             }
         }
 
@@ -185,13 +185,14 @@ namespace FSX
                 }
                 else if ((cmd == "source") || (cmd == "."))
                 {
-                    foreach (String arg in args)
+                    foreach (String pathname in args)
                     {
-                        if (RcFiles.Contains(arg)) break;
-                        RcFiles.Push(arg);
-                        StreamReader file = new StreamReader(arg);
+                        if (CmdSources.Contains(pathname)) break; // prevent infinite recursion
+                        CmdSources.Push(pathname);
+                        StreamReader file = new StreamReader(pathname);
                         CommandLoop(file);
-                        RcFiles.Pop();
+                        file.Close();
+                        CmdSources.Pop();
                     }
                 }
                 else if (cmd == "out")
@@ -216,18 +217,17 @@ namespace FSX
                 else if ((cmd == "vols") || (cmd == "volumes"))
                 {
                     String fmt = (Verbose == 0) ? "{0}:" : "{0}:\t{1}\t{2}";
-                    foreach (VDE v in VolMap.Values)
+                    foreach (VolInfo vol in VolMap.Values)
                     {
-                        Out.WriteLine(fmt, v.Key, v.FS.Type, v.FS.Source);
+                        Out.WriteLine(fmt, vol.ID, vol.FS.Type, vol.FS.Source);
                     }
                 }
                 else if (cmd == "info")
                 {
-                    foreach (String arg in args)
+                    foreach (String id in args)
                     {
-                        String s = arg;
-                        VDE v = ParseVol(ref s);
-                        Out.WriteLine(v.FS.Info);
+                        VolInfo vol = GetVol(id);
+                        if (vol.FS != null) Out.WriteLine(vol.FS.Info);
                     }
                 }
                 else if (cmd == "test")
@@ -237,82 +237,77 @@ namespace FSX
                 else if ((cmd == "load") || (cmd == "mount"))
                 {
                     if (args.Count != 2) continue;
-                    String s = args[0]; // volume name
-                    if (s.EndsWith(@"\")) s = s.Substring(0, s.Length - 1);
-                    if (s.EndsWith(@":")) s = s.Substring(0, s.Length - 1);
-                    if (s.Length == 1) s = s.ToUpperInvariant();
-                    String arg = args[1]; // volume source
-                    FileSystem fs = LoadFS(arg, opts);
+                    String id = args[0]; // volume name
+                    String pathname = args[1]; // volume source
+                    if (id.EndsWith(@"\")) id = id.Substring(0, id.Length - 1);
+                    if (id.EndsWith(@":")) id = id.Substring(0, id.Length - 1);
+                    if (id.Length == 1) id = id.ToUpperInvariant();
+                    FileSystem fs = LoadFS(pathname, opts);
                     if (fs != null)
                     {
-                        VDE v = new VDE(s, fs);
-                        VolMap[v.Key] = v;
-                        Console.Error.WriteLine("{0}: = {1} [{2}]", v.Key, v.FS.Source, v.FS.Type);
-                        if ((v.FS.GetType() == typeof(HostFS)) && (!v.FS.Source.StartsWith(s))) v.FS.ChangeDir(@"\");
+                        VolInfo vol = new VolInfo(id, fs);
+                        VolMap[vol.ID] = vol;
+                        Console.Error.WriteLine("{0}: = {1} [{2}]", vol.ID, vol.FS.Source, vol.FS.Type);
+                        if ((vol.FS.GetType() == typeof(HostFS)) && (!vol.FS.Source.StartsWith(id))) vol.FS.ChangeDir(@"\");
                     }
                 }
                 else if ((cmd == "save") || (cmd == "write"))
                 {
                     if (args.Count == 0) continue; 
-                    String s = args[0]; // source volume/file
-                    String arg = (args.Count > 1) ? args[1] : String.Empty; // target file
-                    VDE src = ParseVol(ref s);
-                    if (s.Length == 0)
+                    String src = args[0]; // source volume/file
+                    String tgt = (args.Count > 1) ? args[1] : String.Empty; // target file
+                    VolInfo vol = ParseVol(ref src);
+                    if (src.Length == 0)
                     {
                         // save volume
-                        if (arg.Length == 0) arg = String.Concat(src.Key, ".", src.FS.Type, ".img");
-                        if (src.FS.SaveFS(arg, null)) Console.Error.WriteLine("{0}: => {1}", src.Key, arg);
+                        if (tgt.Length == 0) tgt = String.Concat(vol.ID, ".", vol.FS.Type, ".img");
+                        if (vol.FS.SaveFS(tgt, null)) Console.Error.WriteLine("{0}: => {1}", vol.ID, tgt);
                     }
                     else
                     {
                         // save file
-                        if (arg.Length == 0) arg = s;
-                        String sfn = src.FS.FullName(s);
-                        if (sfn != null)
+                        if (tgt.Length == 0) tgt = src;
+                        String name = vol.FS.FullName(src);
+                        if (name != null)
                         {
-                            File.WriteAllBytes(arg, src.FS.ReadFile(s));
-                            Console.Error.WriteLine("{0}:{1} => {2}", src.Key, sfn, arg);
+                            File.WriteAllBytes(tgt, vol.FS.ReadFile(name));
+                            Console.Error.WriteLine("{0}:{1} => {2}", vol.ID, name, tgt);
                         }
                     }
                 }
                 else if ((cmd == "unload") || (cmd == "unmount") || (cmd == "umount"))
                 {
-                    foreach (String arg in args)
+                    foreach (String id in args)
                     {
-                        Int32 p = arg.IndexOf(':');
-                        String k = (p == -1) ? arg : arg.Substring(0, p);
-                        if (VolMap.ContainsKey(k))
+                        VolInfo vol = GetVol(id);
+                        if (vol.ID == CurVol.ID)
                         {
-                            VDE v = VolMap[k];
-                            if (v.Key != Vol.Key)
-                            {
-                                VolMap.Remove(k);
-                            }
-                            else
-                            {
-                                Console.Error.WriteLine("Cannot unmount current volume.  Change to another volume first.");
-                            }
+                            Console.Error.WriteLine("Cannot unmount current volume.  Change to another volume first.");
+                        }
+                        else if (vol.ID != null)
+                        {
+                            VolMap.Remove(vol.ID);
                         }
                     }
                 }
                 else if (cmd == "dirs")
                 {
-                    foreach (VDE v in VolMap.Values)
+                    foreach (VolInfo vol in VolMap.Values)
                     {
-                        Out.WriteLine("{0}:\t{1}", v.Key, v.FS.Dir);
+                        Out.WriteLine("{0}:\t{1}", vol.ID, vol.FS.Dir);
                     }
                 }
                 else if (cmd == "pwd")
                 {
-                    Out.WriteLine("{0}:{1}", Vol.Key, Vol.FS.Dir);
+                    Out.WriteLine("{0}:{1}", CurVol.ID, CurVol.FS.Dir);
                 }
                 else if (cmd == "cd")
                 {
                     foreach (String arg in args)
                     {
-                        String s = arg;
-                        VDE v = ParseVol(ref s);
-                        v.FS.ChangeDir(s);
+                        String dir = arg;
+                        VolInfo vol = ParseVol(ref dir);
+                        vol.FS.ChangeDir(dir);
                     }
                 }
                 else if ((cmd == "dir") || (cmd == "ls"))
@@ -320,9 +315,9 @@ namespace FSX
                     if (args.Count == 0) args.Add(String.Empty);
                     foreach (String arg in args)
                     {
-                        String s = arg;
-                        VDE v = ParseVol(ref s);
-                        v.FS.ListDir(s, Out);
+                        String pattern = arg;
+                        VolInfo vol = ParseVol(ref pattern);
+                        vol.FS.ListDir(pattern, Out);
                     }
                 }
                 else if (cmd == "dumpdir")
@@ -330,27 +325,27 @@ namespace FSX
                     if (args.Count == 0) args.Add(String.Empty);
                     foreach (String arg in args)
                     {
-                        String s = arg;
-                        VDE v = ParseVol(ref s);
-                        v.FS.DumpDir(s, Out);
+                        String pattern = arg;
+                        VolInfo vol = ParseVol(ref pattern);
+                        vol.FS.DumpDir(pattern, Out);
                     }
                 }
                 else if ((cmd == "type") || (cmd == "cat"))
                 {
                     foreach (String arg in args)
                     {
-                        String s = arg;
-                        VDE v = ParseVol(ref s);
-                        v.FS.ListFile(s, v.FS.DefaultEncoding, Out);
+                        String file = arg;
+                        VolInfo vol = ParseVol(ref file);
+                        vol.FS.ListFile(file, vol.FS.DefaultEncoding, Out);
                     }
                 }
                 else if (cmd == "zcat")
                 {
                     foreach (String arg in args)
                     {
-                        String s = arg;
-                        VDE v = ParseVol(ref s);
-                        Byte[] data = v.FS.ReadFile(s);
+                        String file = arg;
+                        VolInfo vol = ParseVol(ref file);
+                        Byte[] data = vol.FS.ReadFile(file);
                         if (data != null)
                         {
                             if (GZip.HasHeader(data))
@@ -368,7 +363,7 @@ namespace FSX
                                 Pack.Decompressor D = new Pack.Decompressor(data);
                                 if (D.GetByteCount() != -1) data = D.GetBytes();
                             }
-                            String buf = v.FS.DefaultEncoding.GetString(data);
+                            String buf = vol.FS.DefaultEncoding.GetString(data);
                             Int32 p = 0;
                             for (Int32 i = 0; i < buf.Length; i++)
                             {
@@ -383,15 +378,15 @@ namespace FSX
                 {
                     foreach (String arg in args)
                     {
-                        String s = arg;
-                        VDE v = ParseVol(ref s);
-                        v.FS.DumpFile(s, Out);
+                        String file = arg;
+                        VolInfo vol = ParseVol(ref file);
+                        vol.FS.DumpFile(file, Out);
                     }
                 }
                 else if (cmd.EndsWith(":"))
                 {
-                    String k = cmd.Substring(0, cmd.Length - 1);
-                    if (VolMap.ContainsKey(k)) Vol = VolMap[k];
+                    VolInfo vol = GetVol(cmd);
+                    if (vol.ID != null) CurVol = vol;
                 }
                 else if (cmd != "")
                 {
@@ -416,11 +411,6 @@ namespace FSX
             while ((p < line.Length) && ((line[p] == ' ') || (line[p] == '\t'))) p++;
             line = line.Substring(p);
             if (line.Length == 0) return false;
-
-            // separate command and args
-            p = line.IndexOf(' ');
-            command = (p == -1) ? line : line.Substring(0, p);
-            line = (p == -1) ? String.Empty : line.Substring(p + 1);
 
             // separate and dequote args
             args = new List<String>();
@@ -509,17 +499,28 @@ namespace FSX
             }
             if (state >= 4) opts.Add(buf.ToString());
             else if (state > 0) args.Add(buf.ToString());
+            if (args.Count == 0) return false;
+            command = args[0];
+            args.RemoveAt(0);
             return true;
         }
 
-        static VDE ParseVol(ref String pathSpec)
+        static VolInfo GetVol(String id)
+        {
+            Int32 p = id.IndexOf(':');
+            if (p != -1) id = id.Substring(0, p);
+            if (!VolMap.ContainsKey(id)) return new VolInfo();
+            return VolMap[id];
+        }
+
+        static VolInfo ParseVol(ref String pathSpec)
         {
             Int32 p = pathSpec.IndexOf(':');
-            if (p == -1) return Vol;
-            String k = pathSpec.Substring(0, p);
-            if (!VolMap.ContainsKey(k)) return Vol;
-            pathSpec = pathSpec.Substring(p + 1);
-            return VolMap[k];
+            if (p == -1) return CurVol; // pathSpec refers to a file on the current volume
+            String id = pathSpec.Substring(0, p);
+            if (!VolMap.ContainsKey(id)) return new VolInfo();
+            pathSpec = pathSpec.Substring(p + 1); // pathSpec refers to a file on volume 'id:'
+            return VolMap[id];
         }
         
         // load a FileSystem from a named location (a file, usually)
@@ -540,19 +541,19 @@ namespace FSX
             }
 
             // identify source volume
-            VDE vol = new VDE();
+            VolInfo vol = new VolInfo();
             String path = source;
             Int32 p = path.IndexOf(':');
             if (p == -1)
             {
-                vol = Vol;
+                vol = CurVol;
             }
             else
             {
                 String k = path.Substring(0, p);
-                foreach (VDE v in VolMap.Values)
+                foreach (VolInfo v in VolMap.Values)
                 {
-                    if (String.Compare(v.Key, k, StringComparison.OrdinalIgnoreCase) == 0)
+                    if (String.Compare(v.ID, k, StringComparison.OrdinalIgnoreCase) == 0)
                     {
                         vol = v;
                         path = path.Substring(p + 1);
@@ -583,7 +584,7 @@ namespace FSX
             }
             // TODO: check file extension (or file length) to see if this file is a candidate for demand-loading
             Byte[] data = ((vol.FS != null) && (vol.FS.FullName(path) != null)) ? vol.FS.ReadFile(path) : File.ReadAllBytes(s);
-            if ((vol.FS != null) && (vol.FS.FullName(path) != null)) s = String.Concat(vol.Key, ":", vol.FS.FullName(path));
+            if ((vol.FS != null) && (vol.FS.FullName(path) != null)) s = String.Concat(vol.ID, ":", vol.FS.FullName(path));
             if (data.Length == 0)
             {
                 Console.Error.WriteLine("Empty File: {0}", s);
@@ -1020,7 +1021,7 @@ namespace FSX
             Out.WriteLine("  zcat [id:]file - show compressed file as text");
             Out.WriteLine("  dump|od [id:]file - show file as a hex dump");
             Out.WriteLine("  save|write [id:]file pathname - export image of file 'file' to file 'pathname'");
-            Out.WriteLine("  out pathname - redirect output to 'pathname' (omit pathname to reset)");
+            Out.WriteLine("  out [pathname] - redirect output to 'pathname' (omit pathname to reset)");
             Out.WriteLine("  verb|verbose n - set verbosity level (default 0)");
             Out.WriteLine("  deb|debug n - set debug level (default 0)");
             Out.WriteLine("  source|. pathname - read commands from 'pathname'");

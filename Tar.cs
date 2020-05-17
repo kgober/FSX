@@ -60,13 +60,12 @@
 
 // Future Improvements / To Do
 // implement ChangeDir
-// support fileSpec in ListDir
-// support wildcards in FullName fileSpec
 
 
 using System;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace FSX
 {
@@ -114,6 +113,8 @@ namespace FSX
 
         public override void ListDir(String fileSpec, TextWriter output)
         {
+            if ((fileSpec == null) || (fileSpec.Length == 0)) fileSpec = "*";
+            Regex RE = Regex(fileSpec);
             Int32 zbc = 0;
             Int32 lbn = 0;
             while (lbn < mVol.BlockCount)
@@ -164,13 +165,13 @@ namespace FSX
                         s = String.Concat(name, " -> ", lname);
                         break;
                     case (Byte)'3': // character device
-                        s = String.Format("CDEV({0:D0},{1:D0})", major, minor);
+                        s = String.Format("{0} CDEV({1:D0},{2:D0})", name, major, minor);
                         break;
                     case (Byte)'4': // block device
-                        s = String.Format("BDEV({0:D0},{1:D0})", major, minor);
+                        s = String.Format("{0} BDEV({1:D0},{2:D0})", name, major, minor);
                         break;
                 }
-                output.WriteLine("{0} {1} {2} {3,10:D0} {4}", B.GetCString(100, 8, Encoding.ASCII), uname, gname, size, s);
+                if (RE.IsMatch(name)) output.WriteLine("{0} {1} {2} {3,10:D0} {4}", B.GetCString(100, 8, Encoding.ASCII), uname, gname, size, s);
             }
         }
 
@@ -201,6 +202,8 @@ namespace FSX
 
         public override String FullName(String fileSpec)
         {
+            if ((fileSpec == null) || (fileSpec.Length == 0)) return null;
+            Regex RE = Regex(fileSpec);
             Int32 zbc = 0;
             Int32 lbn = 0;
             while (lbn < mVol.BlockCount)
@@ -216,8 +219,9 @@ namespace FSX
                 Int32 size;
                 ParseOctal(B, 124, 12, out size);
                 Byte flag = B.GetByte(156);
+                if (flag == '1') size = 0;
                 if ((size > 0) && (flag != '5') && (!name.EndsWith("/"))) lbn += (size + 511) / 512;
-                if (String.Compare(name, fileSpec, StringComparison.Ordinal) != 0) continue;
+                if (!RE.IsMatch(name)) continue;
                 if ((flag == 0) || (flag == (Byte)'0')) return name;
                 if (flag == '1') return FullName(B.GetCString(157, 100, Encoding.ASCII));
             }
@@ -241,6 +245,7 @@ namespace FSX
                 Int32 size;
                 ParseOctal(B, 124, 12, out size);
                 Byte flag = B.GetByte(156);
+                if (flag == '1') size = 0;
                 if ((String.Compare(name, fileSpec, StringComparison.Ordinal) != 0) || ((flag != 0) && (flag != '0')))
                 {
                     if ((size > 0) && (flag != '5') && (!name.EndsWith("/"))) lbn += (size + 511) / 512;
@@ -311,6 +316,17 @@ namespace FSX
             offset += p;
             value = m * n;
             return true;
+        }
+
+        private static Regex Regex(String pattern)
+        {
+            String p = pattern;
+            p = p.Replace(".", "\ufffd");
+            p = p.Replace("?", ".").Replace("*", @".*");
+            p = p.Replace("\ufffd", "\\.");
+            p = String.Concat("^", p, "$");
+            Debug.WriteLine(2, "Regex: {0} => {1}", pattern, p);
+            return new Regex(p);
         }
     }
 

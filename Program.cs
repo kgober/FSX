@@ -257,6 +257,7 @@ namespace FSX
                     String src = args[0]; // source volume/file
                     String tgt = (args.Count > 1) ? args[1] : String.Empty; // target file
                     VolInfo vol = ParseVol(ref src);
+                    if (vol.ID == null) continue;
                     if (src.Length == 0)
                     {
                         // save volume
@@ -307,7 +308,7 @@ namespace FSX
                     {
                         String dir = arg;
                         VolInfo vol = ParseVol(ref dir);
-                        vol.FS.ChangeDir(dir);
+                        if (vol.FS != null) vol.FS.ChangeDir(dir);
                     }
                 }
                 else if ((cmd == "dir") || (cmd == "ls"))
@@ -317,7 +318,7 @@ namespace FSX
                     {
                         String pattern = arg;
                         VolInfo vol = ParseVol(ref pattern);
-                        vol.FS.ListDir(pattern, Out);
+                        if (vol.FS != null) vol.FS.ListDir(pattern, Out);
                     }
                 }
                 else if (cmd == "dumpdir")
@@ -327,7 +328,7 @@ namespace FSX
                     {
                         String pattern = arg;
                         VolInfo vol = ParseVol(ref pattern);
-                        vol.FS.DumpDir(pattern, Out);
+                        if (vol.FS != null) vol.FS.DumpDir(pattern, Out);
                     }
                 }
                 else if ((cmd == "type") || (cmd == "cat"))
@@ -336,7 +337,7 @@ namespace FSX
                     {
                         String file = arg;
                         VolInfo vol = ParseVol(ref file);
-                        vol.FS.ListFile(file, vol.FS.DefaultEncoding, Out);
+                        if (vol.FS != null) vol.FS.ListFile(file, vol.FS.DefaultEncoding, Out);
                     }
                 }
                 else if (cmd == "zcat")
@@ -345,6 +346,7 @@ namespace FSX
                     {
                         String file = arg;
                         VolInfo vol = ParseVol(ref file);
+                        if (vol.ID == null) continue;
                         Byte[] data = vol.FS.ReadFile(file);
                         if (data != null)
                         {
@@ -380,7 +382,7 @@ namespace FSX
                     {
                         String file = arg;
                         VolInfo vol = ParseVol(ref file);
-                        vol.FS.DumpFile(file, Out);
+                        if (vol.FS != null) vol.FS.DumpFile(file, Out);
                     }
                 }
                 else if (cmd.EndsWith(":"))

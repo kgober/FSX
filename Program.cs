@@ -1192,6 +1192,7 @@ namespace FSX
                         if ((i + j < data.Length) && (j < l))
                         {
                             Byte b = data[i + j];
+                            b &= 0x7f;
                             c = ((b >= 32) && (b < 127)) ? (char)b : '.';
                         }
                         output.Write(c);

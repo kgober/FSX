@@ -1,5 +1,5 @@
 // HostFS.cs
-// Copyright © 2019-2020 Kenneth Gober
+// Copyright © 2019-2020,2023 Kenneth Gober
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -200,7 +200,15 @@ namespace FSX
         {
             String fn = (fileSpec.StartsWith(@"\")) ? fileSpec : String.Concat(mCWD.FullName, @"\", fileSpec);
             if (!IsValidFile(fn)) return new Byte[0];
-            return File.ReadAllBytes(fn);
+            try
+            {
+                return File.ReadAllBytes(fn);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("{0}: {1}", ex.GetType().ToString(), ex.Message);
+                return new Byte[0];
+            }
         }
 
         public override Boolean SaveFS(String fileName, String format)

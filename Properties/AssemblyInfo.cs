@@ -1,5 +1,5 @@
 ﻿// AssemblyInfo.cs
-// Copyright © 2019-2020 Kenneth Gober
+// Copyright © 2019-2020,2023 Kenneth Gober
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +32,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("File System Exchange")]
-[assembly: AssemblyCopyright("Copyright © 2019-2020 Kenneth Gober")]
+[assembly: AssemblyCopyright("Copyright © 2019-2020,2023 Kenneth Gober")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
